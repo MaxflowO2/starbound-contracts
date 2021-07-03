@@ -3,6 +3,9 @@ node_modules
 #Hardhat files
 cache
 artifacts
-
+build
+typechain
+coverage*
+.env
 .secrets.json
 secrets.json
