@@ -4,8 +4,6 @@ pragma solidity ^0.7.6;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "../interfaces/IPancakeFactory.sol";
-import "../interfaces/IPancakeRouter02.sol";
 import "../libraries/TransferHelper.sol";
 import "../libraries/Whitelistable.sol";
 
@@ -15,13 +13,10 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
     event TokensPurchased(address indexed buyer, uint256 indexed amount);
     event TokensClaimed(address indexed buyer, uint256 indexed amount);
     event TokensReleased(address indexed buyer, uint256 indexed amount);
-    event LiquidityMigrated(uint256 amountToken, uint256 amountETH, uint256 liquidity);
     event SaleClosed();
 
     address public constant ZERO_ADDRESS = address(0);
     uint256 public pricePresale;
-    IPancakeFactory public pancakeFactory;
-    IPancakeRouter02 public pancakeRouter;
     address public tokenOut;
     uint256 public startDate;
     uint256 public endDate;
@@ -32,7 +27,6 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
     uint256 public hardCap;
     uint256 public tokensSold;
     bool public isClosed;
-    bool public liquidityMigrated;
     address public tokenContract;
 
     mapping(address => uint256) public tokensPurchased;
@@ -65,8 +59,6 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
         uint256 _softCap,
         uint256 _hardCap,
         address _tokenOut,
-        address _pancakeRouter,
-        address _pancakeFactory,
         uint256 _pricePresale
     ) public {
         require(_softCap < _hardCap, "StarboundPrivateSale: softCap cannot be higher then hardCap");
@@ -83,8 +75,6 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
         softCap = _softCap;
         hardCap = _hardCap;
         tokenOut = _tokenOut;
-        pancakeRouter = IPancakeRouter02(_pancakeRouter);
-        pancakeFactory = IPancakeFactory(_pancakeFactory);
         pricePresale = _pricePresale;
     }
 

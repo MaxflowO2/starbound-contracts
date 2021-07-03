@@ -1,4 +1,6 @@
 require("@nomiclabs/hardhat-waffle");
+require('@nomiclabs/hardhat-ethers');
+const { mnemonic } = require('./.secrets.json');
 
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
@@ -17,6 +19,39 @@ task("accounts", "Prints the list of accounts", async () => {
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
-  solidity: "0.7.6",
+  defaultNetwork: "mainnet",
+  networks: {
+    localhost: {
+      url: "http://127.0.0.1:8545"
+    },
+    hardhat: {
+    },
+    testnet: {
+      url: "https://data-seed-prebsc-1-s1.binance.org:8545",
+      chainId: 97,
+      accounts: {mnemonic: mnemonic}
+    },
+    mainnet: {
+      url: "https://bsc-dataseed.binance.org/",
+      chainId: 56,
+      accounts: {mnemonic: mnemonic}
+    }
+  },
+  solidity: {
+  version: "0.7.6",
+  settings: {
+    optimizer: {
+      enabled: true
+    }
+   }
+  },
+  paths: {
+    sources: "./contracts",
+    tests: "./test",
+    cache: "./cache",
+    artifacts: "./artifacts"
+  },
+  mocha: {
+    timeout: 20000
+  }
 };
-

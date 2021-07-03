@@ -11,7 +11,7 @@ contract Whitelistable is Ownable {
      *
      */
     modifier onlyWhitelist() {
-        require(isWhitelisted(_msgSender()), "Whitelistable: Your ass is not on the whitelist.");
+        require(isWhitelisted(_msgSender()), "Whitelistable: You're not on the whitelist.");
         _;
     }
 
