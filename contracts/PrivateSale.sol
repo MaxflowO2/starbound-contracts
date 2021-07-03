@@ -19,8 +19,7 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
     event SaleClosed();
 
     address public constant ZERO_ADDRESS = address(0);
-    uint256 public priceFairLaunch;
-    uint256 public pricePancakeswap;
+    uint256 public pricePresale;
     IPancakeFactory public pancakeFactory;
     IPancakeRouter02 public pancakeRouter;
     address public tokenOut;
@@ -68,14 +67,12 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
         address _tokenOut,
         address _pancakeRouter,
         address _pancakeFactory,
-        uint256 _priceFairLaunch,
-        uint256 _pricePancakeswap
+        uint256 _pricePresale
     ) public {
         require(_softCap < _hardCap, "StarboundPrivateSale: softCap cannot be higher then hardCap");
         require(_startDate < _endDate, "StarboundPrivateSale: startDate cannot be after endDate");
         require(_endDate > block.timestamp, "StarboundPrivateSale: endDate must be in the future");
         require(_minCommitment < _maxCommitment, "StarboundPrivateSale: minCommitment cannot be higher then maxCommitment");
-        require(_pricePancakeswap < _priceFairLaunch, "StarboundPrivateSale: pancakeswap price cannot be lower then fairlaunch");
         require(_unlockDate > _endDate || _unlockDate == 0, "StarboundPrivateSale: invalid unlockDate");
 
         startDate = _startDate;
@@ -88,8 +85,7 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
         tokenOut = _tokenOut;
         pancakeRouter = IPancakeRouter02(_pancakeRouter);
         pancakeFactory = IPancakeFactory(_pancakeFactory);
-        priceFairLaunch = _priceFairLaunch;
-        pricePancakeswap = _pricePancakeswap;
+        pricePresale = _pricePresale;
     }
 
     /**
@@ -109,16 +105,39 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
     }
 
     /**
-     * @dev close sale if minRaise is reached & migrates liquidity to Pancake
+     * @dev close sale if minRaise is reached
      *
      */
-    function closeSale() external tokensUnlocked {
+    function closeSale() external onlyOwner tokensUnlocked {
         require(!isClosed, "StarboundPrivateSale: already closed");
         require(block.timestamp > endDate || tokensSold == hardCap, "StarboundPrivateSale: endDate not passed or hardcap not reached");
         require(tokensSold >= softCap, "StarboundPrivateSale: softCap not reached");
         isClosed = true;
 
         emit SaleClosed();
+    }
+
+    function setTokenOut(address _tokenOut) external onlyOwner {
+        tokenOut = _tokenOut;
+    }
+
+    function setPricePresale(uint256 _pricePresale) external onlyOwner {
+        pricePresale = _pricePresale;
+    }
+
+    function setStartDate(uint256 _startDate) external onlyOwner {
+        require(_startDate < endDate, "StarboundPrivateSale: invalid startDate");
+        startDate = _startDate;
+    }
+
+    function setEndDate(uint256 _endDate) external onlyOwner {
+        require(_endDate > startDate && _endDate < unlockDate, "StarboundPrivateSale: invalid endDate");
+        endDate = _endDate;
+    }
+
+    function setUnlockDate(uint256 _unlockDate) external onlyOwner {
+        require(_unlockDate > endDate || _unlockDate == 0, "StarboundPrivateSale: invalid unlockDate");
+        unlockDate = _unlockDate;
     }
 
     /**
@@ -128,7 +147,7 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
     function claimTokens() external tokensUnlocked {
         require(isClosed, "StarboundPrivateSale: sale not closed");
         require(tokensPurchased[msg.sender] > 0, "StarboundPrivateSale: no tokens to claim");
-        uint256 purchasedTokens = tokensPurchased[msg.sender].mul(priceFairLaunch).div(10**9);
+        uint256 purchasedTokens = tokensPurchased[msg.sender].mul(pricePresale).div(10**9);
         tokensPurchased[msg.sender] = 0;
         TransferHelper.safeTransfer(address(tokenOut), msg.sender, purchasedTokens);
         emit TokensClaimed(msg.sender, purchasedTokens);
@@ -156,7 +175,15 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
      *
      */
     function tokensRemaining() external view returns (uint256) {
-        return (hardCap.sub(tokensSold).mul(priceFairLaunch).div(10**9));
+        return (hardCap.sub(tokensSold).mul(pricePresale).div(10**9));
+    }
+
+    /**
+     * @dev to get remaining token at any point of the sale
+     *
+     */
+    function bnbRemaining() external view returns (uint256) {
+        return hardCap.sub(tokensSold);
     }
 
     /**
@@ -184,7 +211,7 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
     }
 
     function getReservedTokens() external view returns (uint256) {
-        tokensPurchased[msg.sender] > 0 ? tokensPurchased[msg.sender].mul(priceFairLaunch).div(10**9) : 0;
+        tokensPurchased[msg.sender] > 0 ? tokensPurchased[msg.sender].mul(pricePresale).div(10**9) : 0;
     }
 
     /**
