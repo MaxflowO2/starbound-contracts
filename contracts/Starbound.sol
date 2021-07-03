@@ -5,11 +5,11 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-import "../interfaces/IPancakeFactory.sol";
-import "../interfaces/IPancakeRouter02.sol";
-import "../libraries/Utils.sol";
-import "../libraries/Structs.sol";
-import "./ReentrancyGuard.sol";
+import "./interfaces/IPancakeFactory.sol";
+import "./interfaces/IPancakeRouter02.sol";
+import "./libraries/Utils.sol";
+import "./libraries/Structs.sol";
+import "./libraries/ReentrancyGuard.sol";
 
 contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
