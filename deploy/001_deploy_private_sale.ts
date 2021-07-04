@@ -15,7 +15,7 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   let softCap = ethers.utils.parseEther('250') // 250 BNB
   let hardCap = ethers.utils.parseEther('600') // 600 BNB
   let tokenOut = '0x0000000000000000000000000000000000000000'
-  let pricePresale = 180e3 * 1e9 // 180,000 $SBD / BNB
+  let pricePresale = 180e3 // 180,000 $SBD / BNB
 
   if (hre.network.name != 'mainnet') {
     startDate = Math.floor(Date.now() / 1000) + 30
