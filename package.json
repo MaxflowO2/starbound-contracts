@@ -29,6 +29,7 @@
     "ethers": "^5.3.1",
     "hardhat": "^2.4.1",
     "hardhat-abi-exporter": "^2.2.1",
+    "hardhat-deploy": "^0.8.9",
     "hardhat-gas-reporter": "^1.0.4",
     "hardhat-typechain": "^0.3.5",
     "prettier": "^2.3.1",

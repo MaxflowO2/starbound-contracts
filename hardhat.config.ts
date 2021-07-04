@@ -2,9 +2,9 @@ require('dotenv').config()
 import { HardhatUserConfig } from 'hardhat/types'
 import '@nomiclabs/hardhat-waffle'
 import '@typechain/hardhat'
-import 'hardhat-abi-exporter'
 import '@nomiclabs/hardhat-etherscan'
 import 'hardhat-gas-reporter'
+import 'hardhat-deploy';
 
 const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY || ''
 const BLOCK_EXPLORER_API_KEY = process.env.BLOCK_EXPLORER_API_KEY || ''
@@ -45,6 +45,9 @@ const config: HardhatUserConfig = {
       chainId: 56,
       accounts: [OWNER_PRIVATE_KEY],
     },
+  },
+  namedAccounts: {
+    deployer: 0,
   },
   etherscan: {
     apiKey: BLOCK_EXPLORER_API_KEY,
