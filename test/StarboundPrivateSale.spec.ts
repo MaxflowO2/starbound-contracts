@@ -141,14 +141,14 @@ describe('StarboundPrivateSale', () => {
         expect(await privateSale.tokensPurchased(alice.address)).to.eq(minCommitment)
         expect(await privateSaleByAlice.tokensRemaining()).to.eq(ethers.utils.parseUnits('1062000', 9))
         expect(await privateSaleByAlice.bnbRemaining()).to.eq(ethers.utils.parseEther('5.9'))
-        // expect(await privateSaleByAlice.getReservedTokens()).to.eq(ethers.utils.parseUnits('18000', 9))
+        expect(await privateSaleByAlice.getReservedTokens()).to.eq(ethers.utils.parseUnits('18000', 9))
 
         await privateSaleByAlice.purchaseTokens({ value: maxCommitment.sub(minCommitment) })
         expect(await privateSale.tokensPurchased(alice.address)).to.eq(maxCommitment)
         expect(await privateSale.tokensSold()).to.eq(maxCommitment)
         expect(await privateSaleByAlice.tokensRemaining()).to.eq(ethers.utils.parseUnits('720000', 9))
         expect(await privateSaleByAlice.bnbRemaining()).to.eq(ethers.utils.parseEther('4'))
-        // expect(await privateSaleByAlice.getReservedTokens()).to.eq(ethers.utils.parseUnits('360000', 9))
+        expect(await privateSaleByAlice.getReservedTokens()).to.eq(ethers.utils.parseUnits('360000', 9))
 
         expect(await privateSale.tokensPurchased(alice.address)).to.eq(maxCommitment)
         await expect(privateSaleByAlice.purchaseTokens({ value: minCommitment })).to.be.revertedWith(
