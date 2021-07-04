@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.7.6;
 
-import "./IPancakeRouter01.sol";
+import './IPancakeRouter01.sol';
 
 interface IPancakeRouter02 is IPancakeRouter01 {
     function removeLiquidityETHSupportingFeeOnTransferTokens(
