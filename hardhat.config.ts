@@ -53,6 +53,11 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: BLOCK_EXPLORER_API_KEY,
   },
+  gasReporter: {
+    currency: 'BNB',
+    gasPrice: 5,
+    enabled: true,
+  }
 }
 
 export default config

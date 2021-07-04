@@ -8,8 +8,8 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
 
   const { deployer } = await getNamedAccounts()
 
-  let startDate = 1625328000
-  let endDate = 1625932800
+  let startDate = 1625421600
+  let endDate = 1625472000
   let minCommitment = ethers.utils.parseEther('0.5') // 0.5 BNB
   let maxCommitment = ethers.utils.parseEther('2') // 2 BNB
   let softCap = ethers.utils.parseEther('250') // 250 BNB
