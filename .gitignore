@@ -1,7 +1,6 @@
 node_modules
 
 #Hardhat files
-abi
 cache
 artifacts
 build
