@@ -182,7 +182,11 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
     }
 
     function getReservedTokens() external view returns (uint256) {
-        tokensPurchased[msg.sender] > 0 ? tokensPurchased[msg.sender].mul(pricePresale).div(10**9) : 0;
+        if (tokensPurchased[msg.sender] > 0) {
+            return tokensPurchased[msg.sender].mul(pricePresale).div(10**9);
+        } else {
+            return 0;
+        }
     }
 
     /**
