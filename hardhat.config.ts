@@ -2,6 +2,7 @@ require('dotenv').config()
 import { HardhatUserConfig } from 'hardhat/types'
 import '@nomiclabs/hardhat-waffle'
 import '@typechain/hardhat'
+import 'hardhat-abi-exporter'
 import '@nomiclabs/hardhat-etherscan'
 import 'hardhat-gas-reporter'
 import 'hardhat-deploy';
