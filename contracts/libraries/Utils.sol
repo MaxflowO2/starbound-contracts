@@ -1,22 +1,27 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.7.6;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "../interfaces/IPancakeRouter02.sol";
+import '@openzeppelin/contracts/math/SafeMath.sol';
+import '../interfaces/IPancakeRouter02.sol';
 
 library Utils {
     using SafeMath for uint256;
 
-    function random(uint256 from, uint256 to, uint256 salty) private view returns (uint256) {
+    function random(
+        uint256 from,
+        uint256 to,
+        uint256 salty
+    ) private view returns (uint256) {
         uint256 seed = uint256(
             keccak256(
                 abi.encodePacked(
-                    block.timestamp + block.difficulty +
-                    ((uint256(keccak256(abi.encodePacked(block.coinbase)))) / (block.timestamp)) +
-                    block.gaslimit +
-                    ((uint256(keccak256(abi.encodePacked(msg.sender)))) / (block.timestamp)) +
-                    block.number +
-                    salty
+                    block.timestamp +
+                        block.difficulty +
+                        ((uint256(keccak256(abi.encodePacked(block.coinbase)))) / (block.timestamp)) +
+                        block.gaslimit +
+                        ((uint256(keccak256(abi.encodePacked(msg.sender)))) / (block.timestamp)) +
+                        block.number +
+                        salty
                 )
             )
         );
@@ -61,8 +66,7 @@ library Utils {
     ) public returns (uint256) {
         if (currentRecipientBalance == 0) {
             return block.timestamp + basedRewardCycleBlock;
-        }
-        else {
+        } else {
             uint256 rate = amount.mul(100).div(currentRecipientBalance);
 
             if (uint256(rate) >= threshHoldTopUpRate) {
@@ -79,10 +83,7 @@ library Utils {
         }
     }
 
-    function swapTokensForEth(
-        address routerAddress,
-        uint256 tokenAmount
-    ) public {
+    function swapTokensForEth(address routerAddress, uint256 tokenAmount) public {
         IPancakeRouter02 pancakeRouter = IPancakeRouter02(routerAddress);
 
         // generate the pancake pair path of token -> weth
@@ -130,7 +131,7 @@ library Utils {
         IPancakeRouter02 pancakeRouter = IPancakeRouter02(routerAddress);
 
         // add the liquidity
-        pancakeRouter.addLiquidityETH{value : ethAmount}(
+        pancakeRouter.addLiquidityETH{value: ethAmount}(
             address(this),
             tokenAmount,
             0, // slippage is unavoidable

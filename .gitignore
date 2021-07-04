@@ -1,8 +1,12 @@
 node_modules
 
 #Hardhat files
+abi
 cache
 artifacts
-
+build
+typechain
+coverage*
+.env
 .secrets.json
 secrets.json

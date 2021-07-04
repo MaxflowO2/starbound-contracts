@@ -1,15 +1,15 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.7.6;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "../interfaces/IPancakeFactory.sol";
-import "../interfaces/IPancakeRouter02.sol";
-import "../libraries/Utils.sol";
-import "../libraries/Structs.sol";
-import "./ReentrancyGuard.sol";
+import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts/access/Ownable.sol';
+import '@openzeppelin/contracts/utils/Address.sol';
+import './interfaces/IPancakeFactory.sol';
+import './interfaces/IPancakeRouter02.sol';
+import './libraries/Utils.sol';
+import './libraries/Structs.sol';
+import './libraries/ReentrancyGuard.sol';
 
 contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
@@ -18,7 +18,7 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     mapping(address => uint256) private _rOwned;
     mapping(address => uint256) private _tOwned;
     mapping(address => mapping(address => uint256)) private _allowances;
-    mapping (address => bool) public _blacklist;
+    mapping(address => bool) public _blacklist;
     bool public _blacklistChangeable = true;
 
     address public constant ZERO_ADDRESS = address(0);
@@ -36,16 +36,17 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
-    InitialDistribution internal _intitialDistribution = InitialDistribution(
-        2e13,  // Marketing -------- 2% total supply
-        9e13,  // Private Presale -- 9% total supply
-        45e13, // Public Presale -- 45% total supply
-        36e13, // Public Listing -- 36% total supply
-        8e13   // Burn ------------- 8% total supply
-    );
+    InitialDistribution internal _intitialDistribution =
+        InitialDistribution(
+            2e13, // Marketing -------- 2% total supply
+            9e13, // Private Presale -- 9% total supply
+            45e13, // Public Presale -- 45% total supply
+            36e13, // Public Listing -- 36% total supply
+            8e13 // Burn ------------- 8% total supply
+        );
 
-    string private _name = "STARBOUND";
-    string private _symbol = "STARBOUND";
+    string private _name = 'STARBOUND';
+    string private _symbol = 'STARBOUND';
     uint8 private _decimals = 9;
 
     IPancakeRouter02 public immutable pancakeRouter;
@@ -57,17 +58,9 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     uint256 tradeStartTime = 0;
 
     event SwapAndLiquifyEnabledUpdated(bool enabled);
-    event SwapAndLiquify(
-        uint256 tokensSwapped,
-        uint256 bnbReceived,
-        uint256 tokensIntoLiqudity
-    );
+    event SwapAndLiquify(uint256 tokensSwapped, uint256 bnbReceived, uint256 tokensIntoLiqudity);
 
-    event ClaimBNBSuccessfully(
-        address recipient,
-        uint256 bnbReceived,
-        uint256 nextAvailableClaimDate
-    );
+    event ClaimBNBSuccessfully(address recipient, uint256 bnbReceived, uint256 nextAvailableClaimDate);
 
     modifier lockTheSwap {
         inSwapAndLiquify = true;
@@ -75,15 +68,12 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         inSwapAndLiquify = false;
     }
 
-    constructor (
-        address payable routerAddress
-    ) public {
+    constructor(address payable routerAddress) public {
         _rOwned[_msgSender()] = _rTotal;
 
         IPancakeRouter02 _pancakeRouter = IPancakeRouter02(routerAddress);
         // Create a pancake pair for this new token
-        pancakePair = IPancakeFactory(_pancakeRouter.factory())
-        .createPair(address(this), _pancakeRouter.WETH());
+        pancakePair = IPancakeFactory(_pancakeRouter.factory()).createPair(address(this), _pancakeRouter.WETH());
 
         // set the rest of the contract variables
         pancakeRouter = _pancakeRouter;
@@ -123,7 +113,7 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     }
 
     function transfer(address recipient, uint256 amount) public override returns (bool) {
-        require(!_blacklist[msg.sender] && !_blacklist[recipient] , "Sender and/or receiver is Blacklisted");
+        require(!_blacklist[msg.sender] && !_blacklist[recipient], 'Sender and/or receiver is Blacklisted');
         _transfer(_msgSender(), recipient, amount, 0);
         return true;
     }
@@ -133,26 +123,41 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     }
 
     function approve(address spender, uint256 amount) public override returns (bool) {
-        require(!_blacklist[msg.sender] && !_blacklist[spender] , "Sender and/or receiver is Blacklisted");
+        require(!_blacklist[msg.sender] && !_blacklist[spender], 'Sender and/or receiver is Blacklisted');
         _approve(_msgSender(), spender, amount);
         return true;
     }
 
-    function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
-        require(!_blacklist[msg.sender] && !_blacklist[sender] && !_blacklist[recipient] , "Sender and/or receiver is Blacklisted");
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) public override returns (bool) {
+        require(
+            !_blacklist[msg.sender] && !_blacklist[sender] && !_blacklist[recipient],
+            'Sender and/or receiver is Blacklisted'
+        );
         _transfer(sender, recipient, amount, 0);
-        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "BEP20: transfer amount exceeds allowance"));
+        _approve(
+            sender,
+            _msgSender(),
+            _allowances[sender][_msgSender()].sub(amount, 'BEP20: transfer amount exceeds allowance')
+        );
         return true;
     }
 
     function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
-        require(!_blacklist[msg.sender] && !_blacklist[spender] , "Sender and/or receiver is Blacklisted");
+        require(!_blacklist[msg.sender] && !_blacklist[spender], 'Sender and/or receiver is Blacklisted');
         _approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
         return true;
     }
 
     function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "BEP20: decreased allowance below zero"));
+        _approve(
+            _msgSender(),
+            spender,
+            _allowances[_msgSender()][spender].sub(subtractedValue, 'BEP20: decreased allowance below zero')
+        );
         return true;
     }
 
@@ -166,33 +171,33 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
 
     function deliver(uint256 tAmount) public {
         address sender = _msgSender();
-        require(!_isExcluded[sender], "Excluded addresses cannot call this function");
-        (uint256 rAmount,,,,,) = _getValues(tAmount);
+        require(!_isExcluded[sender], 'Excluded addresses cannot call this function');
+        (uint256 rAmount, , , , , ) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rTotal = _rTotal.sub(rAmount);
         _tFeeTotal = _tFeeTotal.add(tAmount);
     }
 
     function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns (uint256) {
-        require(tAmount <= _tTotal, "Amount must be less than supply");
+        require(tAmount <= _tTotal, 'Amount must be less than supply');
         if (!deductTransferFee) {
-            (uint256 rAmount,,,,,) = _getValues(tAmount);
+            (uint256 rAmount, , , , , ) = _getValues(tAmount);
             return rAmount;
         } else {
-            (,uint256 rTransferAmount,,,,) = _getValues(tAmount);
+            (, uint256 rTransferAmount, , , , ) = _getValues(tAmount);
             return rTransferAmount;
         }
     }
 
     function tokenFromReflection(uint256 rAmount) public view returns (uint256) {
-        require(rAmount <= _rTotal, "Amount must be less than total reflections");
+        require(rAmount <= _rTotal, 'Amount must be less than total reflections');
         uint256 currentRate = _getRate();
         return rAmount.div(currentRate);
     }
 
     function excludeFromReward(address account) public onlyOwner() {
         // require(account != 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, 'We can not exclude Pancake router.');
-        require(!_isExcluded[account], "Account is already excluded");
+        require(!_isExcluded[account], 'Account is already excluded');
         if (_rOwned[account] > 0) {
             _tOwned[account] = tokenFromReflection(_rOwned[account]);
         }
@@ -201,7 +206,7 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     }
 
     function includeInReward(address account) external onlyOwner() {
-        require(_isExcluded[account], "Account is already excluded");
+        require(_isExcluded[account], 'Account is already excluded');
         for (uint256 i = 0; i < _excluded.length; i++) {
             if (_excluded[i] == account) {
                 _excluded[i] = _excluded[_excluded.length - 1];
@@ -213,8 +218,19 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         }
     }
 
-    function _transferBothExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
+    function _transferBothExcluded(
+        address sender,
+        address recipient,
+        uint256 tAmount
+    ) private {
+        (
+            uint256 rAmount,
+            uint256 rTransferAmount,
+            uint256 rFee,
+            uint256 tTransferAmount,
+            uint256 tFee,
+            uint256 tLiquidity
+        ) = _getValues(tAmount);
         _tOwned[sender] = _tOwned[sender].sub(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
@@ -253,20 +269,52 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         _tFeeTotal = _tFeeTotal.add(tFee);
     }
 
-    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256) {
+    function _getValues(uint256 tAmount)
+        private
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256
+        )
+    {
         (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getTValues(tAmount);
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, tLiquidity, _getRate());
         return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity);
     }
 
-    function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256) {
+    function _getTValues(uint256 tAmount)
+        private
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256
+        )
+    {
         uint256 tFee = calculateTaxFee(tAmount);
         uint256 tLiquidity = calculateLiquidityFee(tAmount);
         uint256 tTransferAmount = tAmount.sub(tFee).sub(tLiquidity);
         return (tTransferAmount, tFee, tLiquidity);
     }
 
-    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
+    function _getRValues(
+        uint256 tAmount,
+        uint256 tFee,
+        uint256 tLiquidity,
+        uint256 currentRate
+    )
+        private
+        pure
+        returns (
+            uint256,
+            uint256,
+            uint256
+        )
+    {
         uint256 rAmount = tAmount.mul(currentRate);
         uint256 rFee = tFee.mul(currentRate);
         uint256 rLiquidity = tLiquidity.mul(currentRate);
@@ -295,20 +343,15 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         uint256 currentRate = _getRate();
         uint256 rLiquidity = tLiquidity.mul(currentRate);
         _rOwned[address(this)] = _rOwned[address(this)].add(rLiquidity);
-        if (_isExcluded[address(this)])
-            _tOwned[address(this)] = _tOwned[address(this)].add(tLiquidity);
+        if (_isExcluded[address(this)]) _tOwned[address(this)] = _tOwned[address(this)].add(tLiquidity);
     }
 
     function calculateTaxFee(uint256 _amount) private view returns (uint256) {
-        return _amount.mul(_taxFee).div(
-            10 ** 2
-        );
+        return _amount.mul(_taxFee).div(10**2);
     }
 
     function calculateLiquidityFee(uint256 _amount) private view returns (uint256) {
-        return _amount.mul(_liquidityFee).div(
-            10 ** 2
-        );
+        return _amount.mul(_liquidityFee).div(10**2);
     }
 
     function removeAllFee() private {
@@ -330,14 +373,17 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         return _isExcludedFromFee[account];
     }
 
-    function _approve(address owner, address spender, uint256 amount) private {
-        require(owner != address(0), "BEP20: approve from the zero address");
-        require(spender != address(0), "BEP20: approve to the zero address");
+    function _approve(
+        address owner,
+        address spender,
+        uint256 amount
+    ) private {
+        require(owner != address(0), 'BEP20: approve from the zero address');
+        require(spender != address(0), 'BEP20: approve to the zero address');
 
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
     }
-
 
     function _checkLiqAdd(address _to) private {
         if (antiBotEnabled && tradeStartTime == 0 && _to == pancakePair) {
@@ -352,10 +398,13 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         uint256 amount,
         uint256 value
     ) private {
-        require(from != ZERO_ADDRESS, "BEP20: transfer from the zero address");
-        require(to != ZERO_ADDRESS, "BEP20: transfer to the zero address");
-        require(amount > 0, "Transfer amount must be greater than zero");
-        require(!_blacklist[msg.sender] && !_blacklist[from] && !_blacklist[to], "Sender and/or receiver is Blacklisted");
+        require(from != ZERO_ADDRESS, 'BEP20: transfer from the zero address');
+        require(to != ZERO_ADDRESS, 'BEP20: transfer to the zero address');
+        require(amount > 0, 'Transfer amount must be greater than zero');
+        require(
+            !_blacklist[msg.sender] && !_blacklist[from] && !_blacklist[to],
+            'Sender and/or receiver is Blacklisted'
+        );
         _checkLiqAdd(to);
 
         ensureMaxTxAmount(from, to, amount, value);
@@ -375,7 +424,6 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         _tokenTransfer(from, to, amount, takeFee);
 
         _checkForBots(from, to);
-
     }
 
     function _checkForBots(address _from, address _to) private {
@@ -388,9 +436,13 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     }
 
     //this method is responsible for taking all fee, if takeFee is true
-    function _tokenTransfer(address sender, address recipient, uint256 amount, bool takeFee) private {
-        if (!takeFee)
-            removeAllFee();
+    function _tokenTransfer(
+        address sender,
+        address recipient,
+        uint256 amount,
+        bool takeFee
+    ) private {
+        if (!takeFee) removeAllFee();
 
         // top up claim cycle
         topUpClaimCycleAfterTransfer(recipient, amount);
@@ -407,12 +459,22 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
             _transferStandard(sender, recipient, amount);
         }
 
-        if (!takeFee)
-            restoreAllFee();
+        if (!takeFee) restoreAllFee();
     }
 
-    function _transferStandard(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
+    function _transferStandard(
+        address sender,
+        address recipient,
+        uint256 tAmount
+    ) private {
+        (
+            uint256 rAmount,
+            uint256 rTransferAmount,
+            uint256 rFee,
+            uint256 tTransferAmount,
+            uint256 tFee,
+            uint256 tLiquidity
+        ) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _takeLiquidity(tLiquidity);
@@ -420,8 +482,19 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
-    function _transferToExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
+    function _transferToExcluded(
+        address sender,
+        address recipient,
+        uint256 tAmount
+    ) private {
+        (
+            uint256 rAmount,
+            uint256 rTransferAmount,
+            uint256 rFee,
+            uint256 tTransferAmount,
+            uint256 tFee,
+            uint256 tLiquidity
+        ) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
@@ -430,8 +503,19 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
-    function _transferFromExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
+    function _transferFromExcluded(
+        address sender,
+        address recipient,
+        uint256 tAmount
+    ) private {
+        (
+            uint256 rAmount,
+            uint256 rTransferAmount,
+            uint256 rFee,
+            uint256 tTransferAmount,
+            uint256 tFee,
+            uint256 tLiquidity
+        ) = _getValues(tAmount);
         _tOwned[sender] = _tOwned[sender].sub(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
@@ -474,14 +558,15 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         .sub(balanceOf(address(pancakePair)));
         // exclude liquidity wallet
 
-        return Utils.calculateBNBReward(
-            _tTotal,
-            balanceOf(address(ofAddress)),
-            address(this).balance,
-            winningDoubleRewardPercentage,
-            totalSupply,
-            ofAddress
-        );
+        return
+            Utils.calculateBNBReward(
+                _tTotal,
+                balanceOf(address(ofAddress)),
+                address(this).balance,
+                winningDoubleRewardPercentage,
+                totalSupply,
+                ofAddress
+            );
     }
 
     function getRewardCycleBlock() public view returns (uint256) {
@@ -489,7 +574,7 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         return easyRewardCycleBlock;
     }
 
-    function claimBNBReward() isHuman nonReentrant public {
+    function claimBNBReward() public isHuman nonReentrant {
         require(nextAvailableClaimDate[msg.sender] <= block.timestamp, 'Error: next available not reached');
         require(balanceOf(msg.sender) >= 0, 'Error: must own MRAT to claim reward');
 
@@ -509,7 +594,7 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         nextAvailableClaimDate[msg.sender] = block.timestamp + getRewardCycleBlock();
         emit ClaimBNBSuccessfully(msg.sender, reward, nextAvailableClaimDate[msg.sender]);
 
-        (bool sent,) = address(msg.sender).call{value : reward}("");
+        (bool sent, ) = address(msg.sender).call{value: reward}('');
         require(sent, 'Error: Cannot withdraw reward');
     }
 
@@ -517,12 +602,9 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         uint256 currentRecipientBalance = balanceOf(recipient);
         uint256 basedRewardCycleBlock = getRewardCycleBlock();
 
-        nextAvailableClaimDate[recipient] = nextAvailableClaimDate[recipient] + Utils.calculateTopUpClaim(
-            currentRecipientBalance,
-            basedRewardCycleBlock,
-            threshHoldTopUpRate,
-            amount
-        );
+        nextAvailableClaimDate[recipient] =
+            nextAvailableClaimDate[recipient] +
+            Utils.calculateTopUpClaim(currentRecipientBalance, basedRewardCycleBlock, threshHoldTopUpRate, amount);
     }
 
     function ensureMaxTxAmount(
@@ -535,7 +617,7 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
             _isExcludedFromMaxTx[from] == false && // default will be false
             _isExcludedFromMaxTx[to] == false // default will be false
         ) {
-            require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
+            require(amount <= _maxTxAmount, 'Transfer amount exceeds the maxTxAmount.');
         }
     }
 
@@ -605,7 +687,7 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         setSwapAndLiquifyEnabled(true);
 
         // approve contract
-        _approve(address(this), address(pancakeRouter), 2 ** 256 - 1);
+        _approve(address(this), address(pancakeRouter), 2**256 - 1);
     }
 
     function disableBlacklistChanges() external onlyOwner() {
@@ -613,7 +695,7 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     }
 
     function _updateBlacklist(address account, bool add) private {
-        require(_blacklistChangeable, "Blacklist can no longer be edited");
+        require(_blacklistChangeable, 'Blacklist can no longer be edited');
         if (add) {
             _blacklist[account] = true;
         } else {
