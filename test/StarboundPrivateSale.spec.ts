@@ -311,6 +311,7 @@ describe('StarboundPrivateSale', () => {
         await privateSaleByAlice.purchaseTokens({ value: minCommitment })
         await privateSaleByBob.purchaseTokens({ value: minCommitment })
         await privateSaleByCarol.purchaseTokens({ value: minCommitment })
+        expect(await provider.getBalance(privateSale.address)).to.eq(minCommitment.mul(3))
 
         await provider.send('evm_setNextBlockTimestamp', [endDate + 1])
 
@@ -329,6 +330,7 @@ describe('StarboundPrivateSale', () => {
         expect(await provider.getBalance(bob.address)).to.be.above(bobBalanceAfterPurchase)
         expect(await provider.getBalance(carol.address)).to.be.above(carolBalanceAfterPurchase)
         expect(await provider.getBalance(david.address)).to.eq(davidBalanceAfterPurchase)
+        expect(await provider.getBalance(privateSale.address)).to.eq(0)
       })
     })
   })
