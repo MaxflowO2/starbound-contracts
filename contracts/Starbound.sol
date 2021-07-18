@@ -1,709 +1,748 @@
-//SPDX-License-Identifier: Unlicense
-pragma solidity ^0.7.6;
+//SPDX-License-Identifier: MIT
 
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import '@openzeppelin/contracts/math/SafeMath.sol';
-import '@openzeppelin/contracts/access/Ownable.sol';
-import '@openzeppelin/contracts/utils/Address.sol';
-import './interfaces/IPancakeFactory.sol';
-import './interfaces/IPancakeRouter02.sol';
-import './libraries/Utils.sol';
-import './libraries/Structs.sol';
-import './libraries/ReentrancyGuard.sol';
+pragma solidity ^0.7.4;
 
-contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
+// 3% reward in BNB
+
+/**
+ * Standard SafeMath, stripped down to just add/sub/mul/div
+ */
+library SafeMath {
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        require(c >= a, "SafeMath: addition overflow");
+
+        return c;
+    }
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return sub(a, b, "SafeMath: subtraction overflow");
+    }
+    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b <= a, errorMessage);
+        uint256 c = a - b;
+
+        return c;
+    }
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+
+        uint256 c = a * b;
+        require(c / a == b, "SafeMath: multiplication overflow");
+
+        return c;
+    }
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return div(a, b, "SafeMath: division by zero");
+    }
+    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        // Solidity only automatically asserts when dividing by 0
+        require(b > 0, errorMessage);
+        uint256 c = a / b;
+        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
+
+        return c;
+    }
+}
+
+/**
+ * BEP20 standard interface.
+ */
+interface IBEP20 {
+    function totalSupply() external view returns (uint256);
+    function decimals() external view returns (uint8);
+    function symbol() external view returns (string memory);
+    function name() external view returns (string memory);
+    function getOwner() external view returns (address);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address _owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+/**
+ * Allows for contract ownership along with multi-address authorization
+ */
+abstract contract Auth {
+    address internal owner;
+    mapping (address => bool) internal authorizations;
+
+    constructor(address _owner) {
+        owner = _owner;
+        authorizations[_owner] = true;
+    }
+
+    /**
+     * Function modifier to require caller to be contract owner
+     */
+    modifier onlyOwner() {
+        require(isOwner(msg.sender), "!OWNER"); _;
+    }
+
+    /**
+     * Function modifier to require caller to be authorized
+     */
+    modifier authorized() {
+        require(isAuthorized(msg.sender), "!AUTHORIZED"); _;
+    }
+
+    /**
+     * Authorize address. Owner only
+     */
+    function authorize(address adr) public onlyOwner {
+        authorizations[adr] = true;
+    }
+
+    /**
+     * Remove address' authorization. Owner only
+     */
+    function unauthorize(address adr) public onlyOwner {
+        authorizations[adr] = false;
+    }
+
+    /**
+     * Check if address is owner
+     */
+    function isOwner(address account) public view returns (bool) {
+        return account == owner;
+    }
+
+    /**
+     * Return address' authorization status
+     */
+    function isAuthorized(address adr) public view returns (bool) {
+        return authorizations[adr];
+    }
+
+    /**
+     * Transfer ownership to new address. Caller must be owner. Leaves old owner authorized
+     */
+    function transferOwnership(address payable adr) public onlyOwner {
+        owner = adr;
+        authorizations[adr] = true;
+        emit OwnershipTransferred(adr);
+    }
+
+    event OwnershipTransferred(address owner);
+}
+
+interface IDEXFactory {
+    function createPair(address tokenA, address tokenB) external returns (address pair);
+}
+
+interface IDEXRouter {
+    function factory() external pure returns (address);
+    function WETH() external pure returns (address);
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountA, uint amountB, uint liquidity);
+
+    function addLiquidityETH(
+        address token,
+        uint amountTokenDesired,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) external payable returns (uint amountToken, uint amountETH, uint liquidity);
+
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external;
+
+    function swapExactETHForTokensSupportingFeeOnTransferTokens(
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external payable;
+
+    function swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external;
+}
+
+interface IDividendDistributor {
+    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution, bool _etfEnabled) external;
+    function setShare(address shareholder, uint256 amount) external;
+    function deposit() external payable;
+    function process(uint256 gas) external;
+}
+
+contract DividendDistributor is IDividendDistributor {
     using SafeMath for uint256;
-    using Address for address;
 
-    mapping(address => uint256) private _rOwned;
-    mapping(address => uint256) private _tOwned;
-    mapping(address => mapping(address => uint256)) private _allowances;
-    mapping(address => bool) public _blacklist;
-    bool public _blacklistChangeable = true;
+    address _token;
 
-    address public constant ZERO_ADDRESS = address(0);
-    address public constant DEAD_ADDRESS = address(0x000000000000000000000000000000000000dEaD);
+    struct Share {
+        uint256 amount;
+        uint256 totalExcludedBNB;
+        uint256 totalRealisedBNB;
+        uint256 totalExcludedUtility;
+        uint256 totalRealisedUtility;
+    }
 
-    mapping(address => bool) private _isExcludedFromFee;
-    mapping(address => bool) private _isExcluded;
-    mapping(address => bool) private _isExcludedFromMaxTx;
+    IBEP20 UTILITY = IBEP20(0x0000000000000000000000000000000000000000);
+    IBEP20 SHIP = IBEP20(0x0000000000000000000000000000000000000000);
+    address WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
 
-    address[] private _excluded;
+    uint256 rewardUtilityFee = 2000;
+    uint256 feeDenominator = 10000;
 
-    uint256 private constant MAX = ~uint256(0);
-    uint256 constant DECIMALS = 1e9;
-    uint256 private _tTotal = 1e15 * DECIMALS;
-    uint256 private _rTotal = (MAX - (MAX % _tTotal));
-    uint256 private _tFeeTotal;
+    IDEXRouter router;
 
-    InitialDistribution internal _intitialDistribution =
-        InitialDistribution(
-            2e13, // Marketing -------- 2% total supply
-            9e13, // Private Presale -- 9% total supply
-            45e13, // Public Presale -- 45% total supply
-            36e13, // Public Listing -- 36% total supply
-            8e13 // Burn ------------- 8% total supply
-        );
+    address[] shareholders;
+    mapping (address => uint256) shareholderIndexes;
+    mapping (address => uint256) shareholderClaims;
 
-    string private _name = 'STARBOUND';
-    string private _symbol = 'STARBOUND';
-    uint8 private _decimals = 9;
+    mapping (address => Share) public shares;
 
-    IPancakeRouter02 public immutable pancakeRouter;
-    address public immutable pancakePair;
+    uint256 public totalShares;
 
-    bool inSwapAndLiquify = false;
+    uint256 public totalDividendsBNB;
+    uint256 public totalDistributedBNB;
+    uint256 public dividendsPerShareBNB;
 
-    bool antiBotEnabled = false;
-    uint256 tradeStartTime = 0;
+    uint256 public totalDividendsUtility;
+    uint256 public totalDistributedUtility;
+    uint256 public dividendsPerShareUtility;
 
-    event SwapAndLiquifyEnabledUpdated(bool enabled);
-    event SwapAndLiquify(uint256 tokensSwapped, uint256 bnbReceived, uint256 tokensIntoLiqudity);
+    uint256 public dividendsPerShareAccuracyFactor = 10 ** 36;
 
-    event ClaimBNBSuccessfully(address recipient, uint256 bnbReceived, uint256 nextAvailableClaimDate);
+    uint256 public minPeriod = 1 hours;
+    uint256 public minDistributionBNB = 1 * (10 ** 10);
+    uint256 public etfEnabled = false;
 
-    modifier lockTheSwap {
-        inSwapAndLiquify = true;
+    uint256 currentIndex;
+
+    bool initialized;
+    modifier initialization() {
+        require(!initialized);
         _;
-        inSwapAndLiquify = false;
+        initialized = true;
     }
 
-    constructor(address payable routerAddress) public {
-        _rOwned[_msgSender()] = _rTotal;
-
-        IPancakeRouter02 _pancakeRouter = IPancakeRouter02(routerAddress);
-        // Create a pancake pair for this new token
-        pancakePair = IPancakeFactory(_pancakeRouter.factory()).createPair(address(this), _pancakeRouter.WETH());
-
-        // set the rest of the contract variables
-        pancakeRouter = _pancakeRouter;
-
-        //exclude owner and this contract from fee
-        _isExcludedFromFee[owner()] = true;
-        _isExcludedFromFee[address(this)] = true;
-
-        // exclude from max tx
-        _isExcludedFromMaxTx[owner()] = true;
-        _isExcludedFromMaxTx[address(this)] = true;
-        _isExcludedFromMaxTx[DEAD_ADDRESS] = true;
-        _isExcludedFromMaxTx[ZERO_ADDRESS] = true;
-
-        emit Transfer(ZERO_ADDRESS, _msgSender(), _tTotal);
+    modifier onlyToken() {
+        require(msg.sender == _token); _;
     }
 
-    function name() public view returns (string memory) {
-        return _name;
+    constructor (address _router) {
+        router = _router != address(0)
+            ? IDEXRouter(_router)
+            : IDEXRouter(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+        _token = msg.sender;
     }
 
-    function symbol() public view returns (string memory) {
-        return _symbol;
+    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution, bool _etfEnabled) external override onlyToken {
+        minPeriod = _minPeriod;
+        minDistributionBNB = _minDistribution;
+        etfEnabled = _etfEnabled;
     }
 
-    function decimals() public view returns (uint8) {
-        return _decimals;
+    function setShare(address shareholder, uint256 amount) external override onlyToken {
+        if(shares[shareholder].amount > 0){
+            distributeDividend(shareholder);
+        }
+
+        if(amount > 0 && shares[shareholder].amount == 0){
+            addShareholder(shareholder);
+        }else if(amount == 0 && shares[shareholder].amount > 0){
+            removeShareholder(shareholder);
+        }
+
+        totalShares = totalShares.sub(shares[shareholder].amount).add(amount);
+        shares[shareholder].amount = amount;
+        shares[shareholder].totalExcludedBNB = getCumulativeDividends(shares[shareholder].amount, dividendsPerShareBNB);
+        shares[shareholder].totalExcludedUtility = getCumulativeDividends(shares[shareholder].amount, dividendsPerShareUtility);
     }
 
-    function totalSupply() public view override returns (uint256) {
-        return _tTotal;
+    function deposit() external payable override onlyToken {
+        uint256 etfFee = 0; 
+        if (etfEnabled) {
+            uint256 balanceBefore = UTILITY.balanceOf(address(this));
+
+            address[] memory path = new address[](2);
+            path[0] = WBNB;
+            path[1] = address(UTILITY);
+
+            etfFee = msg.value.mul(rewardUtilityFee).div(feeDenominator);
+
+            router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: etfFee}(
+                0,
+                path,
+                address(this),
+                block.timestamp
+            );
+
+            uint256 amount = UTILITY.balanceOf(address(this)).sub(balanceBefore);
+
+            totalDividendsUtility = totalDividendsUtility.add(amount);
+            dividendsPerShareUtility = dividendsPerShareUtility.add(dividendsPerShareAccuracyFactor.mul(amount).div(totalShares));
+        }
+        totalDividendsBNB = totalDividendsBNB.add(msg.value.sub(etfFee));
+        dividendsPerShareBNB = dividendsPerShareBNB.add(dividendsPerShareAccuracyFactor.mul(amount).div(totalShares));
     }
 
-    function balanceOf(address account) public view override returns (uint256) {
-        if (_isExcluded[account]) return _tOwned[account];
-        return tokenFromReflection(_rOwned[account]);
+    function process(uint256 gas) external override onlyToken {
+        uint256 shareholderCount = shareholders.length;
+
+        if(shareholderCount == 0) { return; }
+
+        uint256 gasUsed = 0;
+        uint256 gasLeft = gasleft();
+
+        uint256 iterations = 0;
+
+        while(gasUsed < gas && iterations < shareholderCount) {
+            if(currentIndex >= shareholderCount){
+                currentIndex = 0;
+            }
+
+            if(shouldDistribute(shareholders[currentIndex])){
+                distributeDividend(shareholders[currentIndex]);
+            }
+
+            gasUsed = gasUsed.add(gasLeft.sub(gasleft()));
+            gasLeft = gasleft();
+            currentIndex++;
+            iterations++;
+        }
     }
 
-    function transfer(address recipient, uint256 amount) public override returns (bool) {
-        require(!_blacklist[msg.sender] && !_blacklist[recipient], 'Sender and/or receiver is Blacklisted');
-        _transfer(_msgSender(), recipient, amount, 0);
-        return true;
+    function shouldDistribute(address shareholder) internal view returns (bool) {
+        return shareholderClaims[shareholder] + minPeriod < block.timestamp
+                && getUnpaidEarnings(shareholder) > minDistribution || ;
     }
 
-    function allowance(address owner, address spender) public view override returns (uint256) {
-        return _allowances[owner][spender];
+    function distributeDividend(address shareholder) internal {
+        if(shares[shareholder].amount == 0){ return; }
+
+        if(etfEnabled) {
+            uint256 amountUtility = getUnpaidEarnings(shareholder, dividendsPerShareUtility, shares[shareholder].totalExcludedUtility);
+            if(amountUtility > 0){
+                totalDistributed = totalDistributedUtility.add(amountUtility);
+                UTILITY.transfer(shareholder, amountUtility);
+                shares[shareholder].totalRealisedUtility = shares[shareholder].totalRealisedUtility.add(amount);
+                shares[shareholder].totalExcludedUtility = getCumulativeDividends(shares[shareholder].amount, dividendsPerShareUtility);
+            }
+        }
+        uint256 amountBNB = getUnpaidEarnings(shareholder, dividendsPerShareBNB, shares[shareholder].totalExcludedBNB);
+        if(amountBNB > 0){
+            totalDistributedBNB = totalDistributedBNB.add(amountBNB);
+            (bool success,) = shareholder.call{value: amountBNB, gas: 3000}("");
+            shareholderClaims[shareholder] = block.timestamp;
+            shares[shareholder].totalRealisedBNB = shares[shareholder].totalRealisedBNB.add(amount);
+            shares[shareholder].totalExcludedBNB = getCumulativeDividends(shares[shareholder].amount, dividendsPerShareBNB);
+        }
     }
+    
+    function claimDividend() external {
+        distributeDividend(msg.sender);
+    }
+
+    function getUnpaidEarnings(address shareholder, dividendsPerShare, shareholderTotalExcluded) public view returns (uint256) {
+        if(shares[shareholder].amount == 0){ return 0; }
+
+        uint256 shareholderTotalDividends = getCumulativeDividends(shares[shareholder].amount, dividendsPerShare);
+
+        if(shareholderTotalDividends <= shareholderTotalExcluded){ return 0; }
+
+        return shareholderTotalDividends.sub(shareholderTotalExcluded);
+    }
+
+    function getCumulativeDividends(uint256 share, dividendsPerShare) internal view returns (uint256) {
+        return share.mul(dividendsPerShare).div(dividendsPerShareAccuracyFactor);
+    }
+
+    function addShareholder(address shareholder) internal {
+        shareholderIndexes[shareholder] = shareholders.length;
+        shareholders.push(shareholder);
+    }
+
+    function removeShareholder(address shareholder) internal {
+        shareholders[shareholderIndexes[shareholder]] = shareholders[shareholders.length-1];
+        shareholderIndexes[shareholders[shareholders.length-1]] = shareholderIndexes[shareholder];
+        shareholders.pop();
+    }
+}
+
+contract STARBOUND is IBEP20, Auth {
+    using SafeMath for uint256;
+
+    address BUSD = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
+    address WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    address DEAD = 0x000000000000000000000000000000000000dEaD;
+    address ZERO = 0x0000000000000000000000000000000000000000;
+
+    string constant _name = "STARBOUND";
+    string constant _symbol = "STARBOUND";
+    uint8 constant _decimals = 9;
+
+    uint256 _totalSupply = 100000000000 * (10 ** _decimals);
+    uint256 public _maxTxAmount = _totalSupply / 1000; // 0.5%
+
+    mapping (address => uint256) _balances;
+    mapping (address => mapping (address => uint256)) _allowances;
+
+    mapping (address => bool) isFeeExempt;
+    mapping (address => bool) isTxLimitExempt;
+    mapping (address => bool) isDividendExempt;
+
+    uint256 liquidityFee = 400;
+    uint256 buybackFee = 400;
+    uint256 rewardFee = 400;
+    uint256 shipFee = 50;
+    uint256 totalFee = 1250;
+    uint256 feeDenominator = 10000;
+
+    address public autoLiquidityReceiver;
+
+    uint256 targetLiquidity = 25;
+    uint256 targetLiquidityDenominator = 100;
+
+    IDEXRouter public router;
+    address public pair;
+
+    uint256 public launchedAt;
+
+    uint256 buybackMultiplierNumerator = 200;
+    uint256 buybackMultiplierDenominator = 100;
+    uint256 buybackMultiplierTriggeredAt;
+    uint256 buybackMultiplierLength = 30 minutes;
+
+    bool public autoBuybackEnabled = false;
+    uint256 autoBuybackCap;
+    uint256 autoBuybackAccumulator;
+    uint256 autoBuybackAmount;
+    uint256 autoBuybackBlockPeriod;
+    uint256 autoBuybackBlockLast;
+
+    DividendDistributor distributor;
+    uint256 distributorGas = 500000;
+
+    bool public swapEnabled = true;
+    uint256 public swapThreshold = _totalSupply / 20000; // 0.005%
+    bool inSwap;
+    modifier swapping() { inSwap = true; _; inSwap = false; }
+
+    constructor (
+        address _presaler,
+        address _presaleContract
+    ) Auth(msg.sender) {
+        router = IDEXRouter(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+        pair = IDEXFactory(router.factory()).createPair(WBNB, address(this));
+        _allowances[address(this)][address(router)] = uint256(-1);
+
+        distributor = new DividendDistributor(address(router));
+
+        isFeeExempt[_presaler] = true;
+        isTxLimitExempt[_presaler] = true;
+        isFeeExempt[_presaleContract] = true;
+        isTxLimitExempt[_presaleContract] = true;
+        isDividendExempt[_presaleContract] = true;
+        isDividendExempt[pair] = true;
+        isDividendExempt[address(this)] = true;
+        isDividendExempt[DEAD] = true;
+
+        autoLiquidityReceiver = msg.sender;
+
+        _balances[_presaler] = _totalSupply;
+        emit Transfer(address(0), _presaler, _totalSupply);
+    }
+
+    receive() external payable { }
+
+    function totalSupply() external view override returns (uint256) { return _totalSupply; }
+    function decimals() external pure override returns (uint8) { return _decimals; }
+    function symbol() external pure override returns (string memory) { return _symbol; }
+    function name() external pure override returns (string memory) { return _name; }
+    function getOwner() external view override returns (address) { return owner; }
+    function balanceOf(address account) public view override returns (uint256) { return _balances[account]; }
+    function allowance(address holder, address spender) external view override returns (uint256) { return _allowances[holder][spender]; }
 
     function approve(address spender, uint256 amount) public override returns (bool) {
-        require(!_blacklist[msg.sender] && !_blacklist[spender], 'Sender and/or receiver is Blacklisted');
-        _approve(_msgSender(), spender, amount);
+        _allowances[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
         return true;
     }
 
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) public override returns (bool) {
-        require(
-            !_blacklist[msg.sender] && !_blacklist[sender] && !_blacklist[recipient],
-            'Sender and/or receiver is Blacklisted'
-        );
-        _transfer(sender, recipient, amount, 0);
-        _approve(
-            sender,
-            _msgSender(),
-            _allowances[sender][_msgSender()].sub(amount, 'BEP20: transfer amount exceeds allowance')
-        );
+    function approveMax(address spender) external returns (bool) {
+        return approve(spender, uint256(-1));
+    }
+
+    function transfer(address recipient, uint256 amount) external override returns (bool) {
+        return _transferFrom(msg.sender, recipient, amount);
+    }
+
+    function transferFrom(address sender, address recipient, uint256 amount) external override returns (bool) {
+        if(_allowances[sender][msg.sender] != uint256(-1)){
+            _allowances[sender][msg.sender] = _allowances[sender][msg.sender].sub(amount, "Insufficient Allowance");
+        }
+
+        return _transferFrom(sender, recipient, amount);
+    }
+
+    function _transferFrom(address sender, address recipient, uint256 amount) internal returns (bool) {
+        if(inSwap){ return _basicTransfer(sender, recipient, amount); }
+        
+        checkTxLimit(sender, amount);
+
+        if(shouldSwapBack()){ swapBack(); }
+        if(shouldAutoBuyback()){ triggerAutoBuyback(); }
+
+        if(!launched() && recipient == pair){ require(_balances[sender] > 0); launch(); }
+
+        _balances[sender] = _balances[sender].sub(amount, "Insufficient Balance");
+
+        uint256 amountReceived = shouldTakeFee(sender) ? takeFee(sender, recipient, amount) : amount;
+        _balances[recipient] = _balances[recipient].add(amountReceived);
+
+        if(!isDividendExempt[sender]){ try distributor.setShare(sender, _balances[sender]) {} catch {} }
+        if(!isDividendExempt[recipient]){ try distributor.setShare(recipient, _balances[recipient]) {} catch {} }
+
+        try distributor.process(distributorGas) {} catch {}
+
+        emit Transfer(sender, recipient, amountReceived);
+        return true;
+    }
+    
+    function _basicTransfer(address sender, address recipient, uint256 amount) internal returns (bool) {
+        _balances[sender] = _balances[sender].sub(amount, "Insufficient Balance");
+        _balances[recipient] = _balances[recipient].add(amount);
+        emit Transfer(sender, recipient, amount);
         return true;
     }
 
-    function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
-        require(!_blacklist[msg.sender] && !_blacklist[spender], 'Sender and/or receiver is Blacklisted');
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
-        return true;
+    function checkTxLimit(address sender, uint256 amount) internal view {
+        require(amount <= _maxTxAmount || isTxLimitExempt[sender], "TX Limit Exceeded");
     }
 
-    function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
-        _approve(
-            _msgSender(),
-            spender,
-            _allowances[_msgSender()][spender].sub(subtractedValue, 'BEP20: decreased allowance below zero')
+    function shouldTakeFee(address sender) internal view returns (bool) {
+        return !isFeeExempt[sender];
+    }
+
+    function getTotalFee(bool selling) public view returns (uint256) {
+        if(launchedAt + 1 >= block.number){ return feeDenominator.sub(1); }
+        if(selling && buybackMultiplierTriggeredAt.add(buybackMultiplierLength) > block.timestamp){ return getMultipliedFee(); }
+        return totalFee;
+    }
+
+    function getMultipliedFee() public view returns (uint256) {
+        uint256 remainingTime = buybackMultiplierTriggeredAt.add(buybackMultiplierLength).sub(block.timestamp);
+        uint256 feeIncrease = totalFee.mul(buybackMultiplierNumerator).div(buybackMultiplierDenominator).sub(totalFee);
+        return totalFee.add(feeIncrease.mul(remainingTime).div(buybackMultiplierLength));
+    }
+
+    function takeFee(address sender, address receiver, uint256 amount) internal returns (uint256) {
+        uint256 feeAmount = amount.mul(getTotalFee(receiver == pair)).div(feeDenominator);
+
+        _balances[address(this)] = _balances[address(this)].add(feeAmount);
+        emit Transfer(sender, address(this), feeAmount);
+
+        return amount.sub(feeAmount);
+    }
+
+    function shouldSwapBack() internal view returns (bool) {
+        return msg.sender != pair
+        && !inSwap
+        && swapEnabled
+        && _balances[address(this)] >= swapThreshold;
+    }
+
+    function swapBack() internal swapping {
+        uint256 dynamicLiquidityFee = isOverLiquified(targetLiquidity, targetLiquidityDenominator) ? 0 : liquidityFee;
+        uint256 amountToLiquify = swapThreshold.mul(dynamicLiquidityFee).div(totalFee).div(2);
+        uint256 amountToSwap = swapThreshold.sub(amountToLiquify);
+
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = WBNB;
+
+        uint256 balanceBefore = address(this).balance;
+
+        router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            amountToSwap,
+            0,
+            path,
+            address(this),
+            block.timestamp
         );
-        return true;
-    }
 
-    function isExcludedFromReward(address account) public view returns (bool) {
-        return _isExcluded[account];
-    }
+        uint256 amountBNB = address(this).balance.sub(balanceBefore);
 
-    function totalFees() public view returns (uint256) {
-        return _tFeeTotal;
-    }
+        uint256 totalBNBFee = totalFee.sub(dynamicLiquidityFee.div(2));
+        
+        uint256 amountBNBLiquidity = amountBNB.mul(dynamicLiquidityFee).div(totalBNBFee).div(2);
+        uint256 amountBNBReward = amountBNB.mul(rewardFee).div(totalBNBFee);
+        uint256 amountBNBShip = amountBNB.mul(shipFee).div(totalBNBFee);
 
-    function deliver(uint256 tAmount) public {
-        address sender = _msgSender();
-        require(!_isExcluded[sender], 'Excluded addresses cannot call this function');
-        (uint256 rAmount, , , , , ) = _getValues(tAmount);
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _rTotal = _rTotal.sub(rAmount);
-        _tFeeTotal = _tFeeTotal.add(tAmount);
-    }
+        try distributor.deposit{value: amountBNBReward}() {} catch {}
+        (bool success,) = SHIP.call{value: amountBNB, gas: 3000}("");
 
-    function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns (uint256) {
-        require(tAmount <= _tTotal, 'Amount must be less than supply');
-        if (!deductTransferFee) {
-            (uint256 rAmount, , , , , ) = _getValues(tAmount);
-            return rAmount;
-        } else {
-            (, uint256 rTransferAmount, , , , ) = _getValues(tAmount);
-            return rTransferAmount;
-        }
-    }
-
-    function tokenFromReflection(uint256 rAmount) public view returns (uint256) {
-        require(rAmount <= _rTotal, 'Amount must be less than total reflections');
-        uint256 currentRate = _getRate();
-        return rAmount.div(currentRate);
-    }
-
-    function excludeFromReward(address account) public onlyOwner() {
-        // require(account != 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, 'We can not exclude Pancake router.');
-        require(!_isExcluded[account], 'Account is already excluded');
-        if (_rOwned[account] > 0) {
-            _tOwned[account] = tokenFromReflection(_rOwned[account]);
-        }
-        _isExcluded[account] = true;
-        _excluded.push(account);
-    }
-
-    function includeInReward(address account) external onlyOwner() {
-        require(_isExcluded[account], 'Account is already excluded');
-        for (uint256 i = 0; i < _excluded.length; i++) {
-            if (_excluded[i] == account) {
-                _excluded[i] = _excluded[_excluded.length - 1];
-                _tOwned[account] = 0;
-                _isExcluded[account] = false;
-                _excluded.pop();
-                break;
-            }
-        }
-    }
-
-    function _transferBothExcluded(
-        address sender,
-        address recipient,
-        uint256 tAmount
-    ) private {
-        (
-            uint256 rAmount,
-            uint256 rTransferAmount,
-            uint256 rFee,
-            uint256 tTransferAmount,
-            uint256 tFee,
-            uint256 tLiquidity
-        ) = _getValues(tAmount);
-        _tOwned[sender] = _tOwned[sender].sub(tAmount);
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        _takeLiquidity(tLiquidity);
-        _reflectFee(rFee, tFee);
-        emit Transfer(sender, recipient, tTransferAmount);
-    }
-
-    function excludeFromFee(address account) public onlyOwner {
-        _isExcludedFromFee[account] = true;
-    }
-
-    function includeInFee(address account) public onlyOwner {
-        _isExcludedFromFee[account] = false;
-    }
-
-    function setTaxFeePercent(uint256 taxFee) external onlyOwner() {
-        _taxFee = taxFee;
-    }
-
-    function setLiquidityFeePercent(uint256 liquidityFee) external onlyOwner() {
-        _liquidityFee = liquidityFee;
-    }
-
-    function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwner {
-        swapAndLiquifyEnabled = _enabled;
-        emit SwapAndLiquifyEnabledUpdated(_enabled);
-    }
-
-    //to receive BNB from pancakeRouter when swapping
-    receive() external payable {}
-
-    function _reflectFee(uint256 rFee, uint256 tFee) private {
-        _rTotal = _rTotal.sub(rFee);
-        _tFeeTotal = _tFeeTotal.add(tFee);
-    }
-
-    function _getValues(uint256 tAmount)
-        private
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getTValues(tAmount);
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, tLiquidity, _getRate());
-        return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity);
-    }
-
-    function _getTValues(uint256 tAmount)
-        private
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        uint256 tFee = calculateTaxFee(tAmount);
-        uint256 tLiquidity = calculateLiquidityFee(tAmount);
-        uint256 tTransferAmount = tAmount.sub(tFee).sub(tLiquidity);
-        return (tTransferAmount, tFee, tLiquidity);
-    }
-
-    function _getRValues(
-        uint256 tAmount,
-        uint256 tFee,
-        uint256 tLiquidity,
-        uint256 currentRate
-    )
-        private
-        pure
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        uint256 rAmount = tAmount.mul(currentRate);
-        uint256 rFee = tFee.mul(currentRate);
-        uint256 rLiquidity = tLiquidity.mul(currentRate);
-        uint256 rTransferAmount = rAmount.sub(rFee).sub(rLiquidity);
-        return (rAmount, rTransferAmount, rFee);
-    }
-
-    function _getRate() private view returns (uint256) {
-        (uint256 rSupply, uint256 tSupply) = _getCurrentSupply();
-        return rSupply.div(tSupply);
-    }
-
-    function _getCurrentSupply() private view returns (uint256, uint256) {
-        uint256 rSupply = _rTotal;
-        uint256 tSupply = _tTotal;
-        for (uint256 i = 0; i < _excluded.length; i++) {
-            if (_rOwned[_excluded[i]] > rSupply || _tOwned[_excluded[i]] > tSupply) return (_rTotal, _tTotal);
-            rSupply = rSupply.sub(_rOwned[_excluded[i]]);
-            tSupply = tSupply.sub(_tOwned[_excluded[i]]);
-        }
-        if (rSupply < _rTotal.div(_tTotal)) return (_rTotal, _tTotal);
-        return (rSupply, tSupply);
-    }
-
-    function _takeLiquidity(uint256 tLiquidity) private {
-        uint256 currentRate = _getRate();
-        uint256 rLiquidity = tLiquidity.mul(currentRate);
-        _rOwned[address(this)] = _rOwned[address(this)].add(rLiquidity);
-        if (_isExcluded[address(this)]) _tOwned[address(this)] = _tOwned[address(this)].add(tLiquidity);
-    }
-
-    function calculateTaxFee(uint256 _amount) private view returns (uint256) {
-        return _amount.mul(_taxFee).div(10**2);
-    }
-
-    function calculateLiquidityFee(uint256 _amount) private view returns (uint256) {
-        return _amount.mul(_liquidityFee).div(10**2);
-    }
-
-    function removeAllFee() private {
-        if (_taxFee == 0 && _liquidityFee == 0) return;
-
-        _previousTaxFee = _taxFee;
-        _previousLiquidityFee = _liquidityFee;
-
-        _taxFee = 0;
-        _liquidityFee = 0;
-    }
-
-    function restoreAllFee() private {
-        _taxFee = _previousTaxFee;
-        _liquidityFee = _previousLiquidityFee;
-    }
-
-    function isExcludedFromFee(address account) public view returns (bool) {
-        return _isExcludedFromFee[account];
-    }
-
-    function _approve(
-        address owner,
-        address spender,
-        uint256 amount
-    ) private {
-        require(owner != address(0), 'BEP20: approve from the zero address');
-        require(spender != address(0), 'BEP20: approve to the zero address');
-
-        _allowances[owner][spender] = amount;
-        emit Approval(owner, spender, amount);
-    }
-
-    function _checkLiqAdd(address _to) private {
-        if (antiBotEnabled && tradeStartTime == 0 && _to == pancakePair) {
-            // This is the initial liquidity add event
-            tradeStartTime = block.timestamp;
-        }
-    }
-
-    function _transfer(
-        address from,
-        address to,
-        uint256 amount,
-        uint256 value
-    ) private {
-        require(from != ZERO_ADDRESS, 'BEP20: transfer from the zero address');
-        require(to != ZERO_ADDRESS, 'BEP20: transfer to the zero address');
-        require(amount > 0, 'Transfer amount must be greater than zero');
-        require(
-            !_blacklist[msg.sender] && !_blacklist[from] && !_blacklist[to],
-            'Sender and/or receiver is Blacklisted'
-        );
-        _checkLiqAdd(to);
-
-        ensureMaxTxAmount(from, to, amount, value);
-
-        // swap and liquify
-        swapAndLiquify(from, to);
-
-        //indicates if fee should be deducted from transfer
-        bool takeFee = true;
-
-        //if any account belongs to _isExcludedFromFee account then remove the fee
-        if (_isExcludedFromFee[from] || _isExcludedFromFee[to]) {
-            takeFee = false;
-        }
-
-        //transfer amount, it will take tax, burn, liquidity fee
-        _tokenTransfer(from, to, amount, takeFee);
-
-        _checkForBots(from, to);
-    }
-
-    function _checkForBots(address _from, address _to) private {
-        if (antiBotEnabled && block.timestamp - tradeStartTime < 3) {
-            if (_from == pancakePair && _to != DEAD_ADDRESS) {
-                // Blacklist all of these buyers
-                _updateBlacklist(_to, true);
-            }
-        }
-    }
-
-    //this method is responsible for taking all fee, if takeFee is true
-    function _tokenTransfer(
-        address sender,
-        address recipient,
-        uint256 amount,
-        bool takeFee
-    ) private {
-        if (!takeFee) removeAllFee();
-
-        // top up claim cycle
-        topUpClaimCycleAfterTransfer(recipient, amount);
-
-        if (_isExcluded[sender] && !_isExcluded[recipient]) {
-            _transferFromExcluded(sender, recipient, amount);
-        } else if (!_isExcluded[sender] && _isExcluded[recipient]) {
-            _transferToExcluded(sender, recipient, amount);
-        } else if (!_isExcluded[sender] && !_isExcluded[recipient]) {
-            _transferStandard(sender, recipient, amount);
-        } else if (_isExcluded[sender] && _isExcluded[recipient]) {
-            _transferBothExcluded(sender, recipient, amount);
-        } else {
-            _transferStandard(sender, recipient, amount);
-        }
-
-        if (!takeFee) restoreAllFee();
-    }
-
-    function _transferStandard(
-        address sender,
-        address recipient,
-        uint256 tAmount
-    ) private {
-        (
-            uint256 rAmount,
-            uint256 rTransferAmount,
-            uint256 rFee,
-            uint256 tTransferAmount,
-            uint256 tFee,
-            uint256 tLiquidity
-        ) = _getValues(tAmount);
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        _takeLiquidity(tLiquidity);
-        _reflectFee(rFee, tFee);
-        emit Transfer(sender, recipient, tTransferAmount);
-    }
-
-    function _transferToExcluded(
-        address sender,
-        address recipient,
-        uint256 tAmount
-    ) private {
-        (
-            uint256 rAmount,
-            uint256 rTransferAmount,
-            uint256 rFee,
-            uint256 tTransferAmount,
-            uint256 tFee,
-            uint256 tLiquidity
-        ) = _getValues(tAmount);
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        _takeLiquidity(tLiquidity);
-        _reflectFee(rFee, tFee);
-        emit Transfer(sender, recipient, tTransferAmount);
-    }
-
-    function _transferFromExcluded(
-        address sender,
-        address recipient,
-        uint256 tAmount
-    ) private {
-        (
-            uint256 rAmount,
-            uint256 rTransferAmount,
-            uint256 rFee,
-            uint256 tTransferAmount,
-            uint256 tFee,
-            uint256 tLiquidity
-        ) = _getValues(tAmount);
-        _tOwned[sender] = _tOwned[sender].sub(tAmount);
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
-        _takeLiquidity(tLiquidity);
-        _reflectFee(rFee, tFee);
-        emit Transfer(sender, recipient, tTransferAmount);
-    }
-
-    // Innovation for protocol by Starbound Team
-    uint256 public rewardCycleBlock = 7 days;
-    uint256 public easyRewardCycleBlock = 1 days;
-    uint256 public threshHoldTopUpRate = 2; // 2 percent
-    uint256 public _maxTxAmount = _tTotal; // should be 0.05% percent per transaction, will be set again at activateContract() function
-    mapping(address => uint256) public nextAvailableClaimDate;
-    bool public swapAndLiquifyEnabled = false; // should be true
-    uint256 public disableEasyRewardFrom = 0;
-    uint256 public winningDoubleRewardPercentage = 5;
-
-    uint256 public _taxFee = 1;
-    uint256 private _previousTaxFee = _taxFee;
-
-    uint256 public _liquidityFee = 8; // 4% will be added pool, 4% will be converted to BNB
-    uint256 private _previousLiquidityFee = _liquidityFee;
-    uint256 public rewardThreshold = 1 ether;
-
-    uint256 minTokenNumberToSell = _tTotal.mul(1).div(10000).div(10); // 0.001% max tx amount will trigger swap and add liquidity
-
-    function setMaxTxPercent(uint256 maxTxPercent) public onlyOwner() {
-        _maxTxAmount = _tTotal.mul(maxTxPercent).div(10000);
-    }
-
-    function setExcludeFromMaxTx(address _address, bool value) public onlyOwner {
-        _isExcludedFromMaxTx[_address] = value;
-    }
-
-    function calculateBNBReward(address ofAddress) public view returns (uint256) {
-        uint256 totalSupply = uint256(_tTotal)
-        .sub(balanceOf(address(0)))
-        .sub(balanceOf(0x000000000000000000000000000000000000dEaD)) // exclude burned wallet
-        .sub(balanceOf(address(pancakePair)));
-        // exclude liquidity wallet
-
-        return
-            Utils.calculateBNBReward(
-                _tTotal,
-                balanceOf(address(ofAddress)),
-                address(this).balance,
-                winningDoubleRewardPercentage,
-                totalSupply,
-                ofAddress
+        if(amountToLiquify > 0){
+            router.addLiquidityETH{value: amountBNBLiquidity}(
+                address(this),
+                amountToLiquify,
+                0,
+                0,
+                autoLiquidityReceiver,
+                block.timestamp
             );
-    }
-
-    function getRewardCycleBlock() public view returns (uint256) {
-        if (block.timestamp >= disableEasyRewardFrom) return rewardCycleBlock;
-        return easyRewardCycleBlock;
-    }
-
-    function claimBNBReward() public isHuman nonReentrant {
-        require(nextAvailableClaimDate[msg.sender] <= block.timestamp, 'Error: next available not reached');
-        require(balanceOf(msg.sender) >= 0, 'Error: must own MRAT to claim reward');
-
-        uint256 reward = calculateBNBReward(msg.sender);
-
-        // reward threshold
-        if (reward >= rewardThreshold) {
-            Utils.swapETHForTokens(
-                address(pancakeRouter),
-                address(0x000000000000000000000000000000000000dEaD),
-                reward.div(5)
-            );
-            reward = reward.sub(reward.div(5));
-        }
-
-        // update rewardCycleBlock
-        nextAvailableClaimDate[msg.sender] = block.timestamp + getRewardCycleBlock();
-        emit ClaimBNBSuccessfully(msg.sender, reward, nextAvailableClaimDate[msg.sender]);
-
-        (bool sent, ) = address(msg.sender).call{value: reward}('');
-        require(sent, 'Error: Cannot withdraw reward');
-    }
-
-    function topUpClaimCycleAfterTransfer(address recipient, uint256 amount) private {
-        uint256 currentRecipientBalance = balanceOf(recipient);
-        uint256 basedRewardCycleBlock = getRewardCycleBlock();
-
-        nextAvailableClaimDate[recipient] =
-            nextAvailableClaimDate[recipient] +
-            Utils.calculateTopUpClaim(currentRecipientBalance, basedRewardCycleBlock, threshHoldTopUpRate, amount);
-    }
-
-    function ensureMaxTxAmount(
-        address from,
-        address to,
-        uint256 amount,
-        uint256 value
-    ) private {
-        if (
-            _isExcludedFromMaxTx[from] == false && // default will be false
-            _isExcludedFromMaxTx[to] == false // default will be false
-        ) {
-            require(amount <= _maxTxAmount, 'Transfer amount exceeds the maxTxAmount.');
+            emit AutoLiquify(amountBNBLiquidity, amountToLiquify);
         }
     }
 
-    function swapAndLiquify(address from, address to) private {
-        // is the token balance of this contract address over the min number of
-        // tokens that we need to initiate a swap + liquidity lock?
-        // also, don't get caught in a circular liquidity event.
-        // also, don't swap & liquify if sender is pancake pair.
-        uint256 contractTokenBalance = balanceOf(address(this));
+    function shouldAutoBuyback() internal view returns (bool) {
+        return msg.sender != pair
+            && !inSwap
+            && autoBuybackEnabled
+            && autoBuybackBlockLast + autoBuybackBlockPeriod <= block.number
+            && address(this).balance >= autoBuybackAmount;
+    }
 
-        if (contractTokenBalance >= _maxTxAmount) {
-            contractTokenBalance = _maxTxAmount;
-        }
-
-        bool shouldSell = contractTokenBalance >= minTokenNumberToSell;
-
-        if (
-            !inSwapAndLiquify &&
-            shouldSell &&
-            from != pancakePair &&
-            swapAndLiquifyEnabled &&
-            !(from == address(this) && to == address(pancakePair)) // swap 1 time
-        ) {
-            // only sell for minTokenNumberToSell, decouple from _maxTxAmount
-            contractTokenBalance = minTokenNumberToSell;
-
-            // add liquidity
-            // split the contract balance into 3 pieces
-            uint256 pooledBNB = contractTokenBalance.div(2);
-            uint256 piece = contractTokenBalance.sub(pooledBNB).div(2);
-            uint256 otherPiece = contractTokenBalance.sub(piece);
-
-            uint256 tokenAmountToBeSwapped = pooledBNB.add(piece);
-
-            uint256 initialBalance = address(this).balance;
-
-            // now is to lock into staking pool
-            Utils.swapTokensForEth(address(pancakeRouter), tokenAmountToBeSwapped);
-
-            // how much BNB did we just swap into?
-
-            // capture the contract's current BNB balance.
-            // this is so that we can capture exactly the amount of BNB that the
-            // swap creates, and not make the liquidity event include any BNB that
-            // has been manually sent to the contract
-            uint256 deltaBalance = address(this).balance.sub(initialBalance);
-
-            uint256 bnbToBeAddedToLiquidity = deltaBalance.div(3);
-
-            // add liquidity to pancake
-            Utils.addLiquidity(address(pancakeRouter), owner(), otherPiece, bnbToBeAddedToLiquidity);
-
-            emit SwapAndLiquify(piece, deltaBalance, otherPiece);
+    function triggerZeusBuyback(uint256 amount, bool triggerBuybackMultiplier) external authorized {
+        buyTokens(amount, DEAD);
+        if(triggerBuybackMultiplier){
+            buybackMultiplierTriggeredAt = block.timestamp;
+            emit BuybackMultiplierActive(buybackMultiplierLength);
         }
     }
-
-    function activateContract() public onlyOwner {
-        // reward claim
-        disableEasyRewardFrom = block.timestamp + 1 weeks;
-        rewardCycleBlock = 7 days;
-        easyRewardCycleBlock = 1 days;
-
-        winningDoubleRewardPercentage = 5;
-
-        // protocol
-        setMaxTxPercent(1);
-        setSwapAndLiquifyEnabled(true);
-
-        // approve contract
-        _approve(address(this), address(pancakeRouter), 2**256 - 1);
+    
+    function clearBuybackMultiplier() external authorized {
+        buybackMultiplierTriggeredAt = 0;
     }
 
-    function disableBlacklistChanges() external onlyOwner() {
-        _blacklistChangeable = false;
+    function triggerAutoBuyback() internal {
+        buyTokens(autoBuybackAmount, DEAD);
+        autoBuybackBlockLast = block.number;
+        autoBuybackAccumulator = autoBuybackAccumulator.add(autoBuybackAmount);
+        if(autoBuybackAccumulator > autoBuybackCap){ autoBuybackEnabled = false; }
     }
 
-    function _updateBlacklist(address account, bool add) private {
-        require(_blacklistChangeable, 'Blacklist can no longer be edited');
-        if (add) {
-            _blacklist[account] = true;
-        } else {
-            _blacklist[account] = false;
+    function buyTokens(uint256 amount, address to) internal swapping {
+        address[] memory path = new address[](2);
+        path[0] = WBNB;
+        path[1] = address(this);
+
+        router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(
+            0,
+            path,
+            to,
+            block.timestamp
+        );
+    }
+
+    function setAutoBuybackSettings(bool _enabled, uint256 _cap, uint256 _amount, uint256 _period) external authorized {
+        autoBuybackEnabled = _enabled;
+        autoBuybackCap = _cap;
+        autoBuybackAccumulator = 0;
+        autoBuybackAmount = _amount;
+        autoBuybackBlockPeriod = _period;
+        autoBuybackBlockLast = block.number;
+    }
+
+    function setBuybackMultiplierSettings(uint256 numerator, uint256 denominator, uint256 length) external authorized {
+        require(numerator / denominator <= 2 && numerator > denominator);
+        buybackMultiplierNumerator = numerator;
+        buybackMultiplierDenominator = denominator;
+        buybackMultiplierLength = length;
+    }
+
+    function launched() internal view returns (bool) {
+        return launchedAt != 0;
+    }
+
+    function launch() internal {
+        launchedAt = block.number;
+    }
+
+    function setTxLimit(uint256 amount) external authorized {
+        require(amount >= _totalSupply / 1000);
+        _maxTxAmount = amount;
+    }
+
+    function setIsDividendExempt(address holder, bool exempt) external authorized {
+        require(holder != address(this) && holder != pair);
+        isDividendExempt[holder] = exempt;
+        if(exempt){
+            distributor.setShare(holder, 0);
+        }else{
+            distributor.setShare(holder, _balances[holder]);
         }
     }
 
-    function updateBlacklist(address account, bool add) external onlyOwner() {
-        _updateBlacklist(account, add);
+    function setIsFeeExempt(address holder, bool exempt) external authorized {
+        isFeeExempt[holder] = exempt;
     }
+
+    function setIsTxLimitExempt(address holder, bool exempt) external authorized {
+        isTxLimitExempt[holder] = exempt;
+    }
+
+    function setFees(uint256 _liquidityFee, uint256 _buybackFee, uint256 _rewardFee, uint256 _feeDenominator) external authorized {
+        liquidityFee = _liquidityFee;
+        buybackFee = _buybackFee;
+        rewardFee = _rewardFee;
+        totalFee = _liquidityFee.add(_buybackFee).add(_rewardFee);
+        feeDenominator = _feeDenominator;
+        require(totalFee < feeDenominator/4);
+    }
+
+    function setFeeReceivers(address _autoLiquidityReceiver) external authorized {
+        autoLiquidityReceiver = _autoLiquidityReceiver;
+    }
+
+    function setSwapBackSettings(bool _enabled, uint256 _amount) external authorized {
+        swapEnabled = _enabled;
+        swapThreshold = _amount;
+    }
+
+    function setTargetLiquidity(uint256 _target, uint256 _denominator) external authorized {
+        targetLiquidity = _target;
+        targetLiquidityDenominator = _denominator;
+    }
+
+    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution, bool _etfEnabled) external authorized {
+        distributor.setDistributionCriteria(_minPeriod, _minDistribution, _etfEnabled);
+    }
+
+    function setDistributorSettings(uint256 gas) external authorized {
+        require(gas < 750000);
+        distributorGas = gas;
+    }
+    
+    function getCirculatingSupply() public view returns (uint256) {
+        return _totalSupply.sub(balanceOf(DEAD)).sub(balanceOf(ZERO));
+    }
+
+    function getLiquidityBacking(uint256 accuracy) public view returns (uint256) {
+        return accuracy.mul(balanceOf(pair).mul(2)).div(getCirculatingSupply());
+    }
+
+    function isOverLiquified(uint256 target, uint256 accuracy) public view returns (bool) {
+        return getLiquidityBacking(accuracy) > target;
+    }
+
+    event AutoLiquify(uint256 amountBNB, uint256 amountSTARBOUND);
+    event BuybackMultiplierActive(uint256 duration);
 }
