@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
+pragma solidity ^0.7.4;
 
-pragma solidity ^0.8.0;
-
-import "./IERC721.sol";
-import "./IERC721Receiver.sol";
-import "./extensions/IERC721Metadata.sol";
-import "../../utils/Address.sol";
-import "../../utils/Context.sol";
-import "../../utils/Strings.sol";
-import "../../utils/introspection/ERC165.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721Metadata.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/introspection/ERC165.sol";
 
 /**
  * @dev Implementation of https://eips.ethereum.org/EIPS/eip-721[ERC721] Non-Fungible Token Standard, including
@@ -42,6 +41,7 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
     uint256 public claimWait = 86400; // 24 hours
 
     uint256 public numberOfHolders = 0;
+    uint256 public numberInCirculation = 0;
 
     /**
      * @dev Initializes the contract by setting a `name` and a `symbol` to the token collection.
@@ -50,6 +50,8 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
         _name = name_;
         _symbol = symbol_;
     }
+
+    receive() external payable { }
 
     /**
      * @dev See {IERC165-supportsInterface}.
@@ -294,8 +296,12 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
         _balances[to] += 1;
         _owners[tokenId] = to;
 
-        if(balances[to] == 1)
+        numberInCirculation += 1;
+
+        if(_balances[to] == 1) {
             numberOfHolders += 1;
+            _claims[to] = block.timestamp;
+        }
 
         emit Transfer(address(0), to, tokenId);
     }
@@ -321,7 +327,9 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
         _balances[owner] -= 1;
         delete _owners[tokenId];
 
-        if(balances[owner] == 0)
+        numberInCirculation -= 1;
+
+        if(_balances[owner] == 0)
             numberOfHolders -= 1;
 
         emit Transfer(owner, address(0), tokenId);
@@ -357,8 +365,10 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
 
         if (_balances[from] == 0 && _balances[to] > 1) // lost a holder 
             numberOfHolders -= 1;
-        else if (_balances[from] > 0 && _balances[to] == 1) // gained a holder 
+        else if (_balances[from] > 0 && _balances[to] == 1) { // gained a holder 
             numberOfHolders += 1;
+            _claims[to] = block.timestamp;
+        }
 
         emit Transfer(from, to, tokenId);
     }
@@ -429,9 +439,10 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata {
     function claimReward() internal {
         require(_balances[msg.sender] > 0, "SHIP: must own at least 1 SHIP token to claimn reward");
         require(block.timestamp - _claims[msg.sender] > claimWait , "SHIP: claiming too early");
+        require(address(this).balance > 0 , "SHIP: no more BNB to claim");
         
-        uint256 amountBNB = this.balance.div(numberOfHolders);
-        (bool success,) = msg.sender.call{value: amountBNB, gas: 3000}("");
+        uint256 amountBNB = address(this).balance / numberInCirculation;
+        (bool success,) = payable(msg.sender).call{value: amountBNB, gas: 3000}("");
 
         if (success)
             _claims[msg.sender] = block.timestamp;

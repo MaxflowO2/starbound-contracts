@@ -1,68 +1,10 @@
-//SPDX-License-Identifier: MIT
-
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.7.4;
 
-// 3% reward in BNB
-
-/**
- * Standard SafeMath, stripped down to just add/sub/mul/div
- */
-library SafeMath {
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, "SafeMath: addition overflow");
-
-        return c;
-    }
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        return sub(a, b, "SafeMath: subtraction overflow");
-    }
-    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b <= a, errorMessage);
-        uint256 c = a - b;
-
-        return c;
-    }
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0) {
-            return 0;
-        }
-
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-
-        return c;
-    }
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        return div(a, b, "SafeMath: division by zero");
-    }
-    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        // Solidity only automatically asserts when dividing by 0
-        require(b > 0, errorMessage);
-        uint256 c = a / b;
-        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
-
-        return c;
-    }
-}
-
-/**
- * BEP20 standard interface.
- */
-interface IBEP20 {
-    function totalSupply() external view returns (uint256);
-    function decimals() external view returns (uint8);
-    function symbol() external view returns (string memory);
-    function name() external view returns (string memory);
-    function getOwner() external view returns (address);
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function allowance(address _owner, address spender) external view returns (uint256);
-    function approve(address spender, uint256 amount) external returns (bool);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-}
+import '@openzeppelin/contracts/math/SafeMath.sol';
+import './interfaces/IBEP20.sol';
+import './interfaces/IDEX.sol';
+import './DividendDistributor.sol';
 
 /**
  * Allows for contract ownership along with multi-address authorization
@@ -130,266 +72,10 @@ abstract contract Auth {
     event OwnershipTransferred(address owner);
 }
 
-interface IDEXFactory {
-    function createPair(address tokenA, address tokenB) external returns (address pair);
-}
-
-interface IDEXRouter {
-    function factory() external pure returns (address);
-    function WETH() external pure returns (address);
-
-    function addLiquidity(
-        address tokenA,
-        address tokenB,
-        uint amountADesired,
-        uint amountBDesired,
-        uint amountAMin,
-        uint amountBMin,
-        address to,
-        uint deadline
-    ) external returns (uint amountA, uint amountB, uint liquidity);
-
-    function addLiquidityETH(
-        address token,
-        uint amountTokenDesired,
-        uint amountTokenMin,
-        uint amountETHMin,
-        address to,
-        uint deadline
-    ) external payable returns (uint amountToken, uint amountETH, uint liquidity);
-
-    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
-        uint amountIn,
-        uint amountOutMin,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external;
-
-    function swapExactETHForTokensSupportingFeeOnTransferTokens(
-        uint amountOutMin,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external payable;
-
-    function swapExactTokensForETHSupportingFeeOnTransferTokens(
-        uint amountIn,
-        uint amountOutMin,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external;
-}
-
-interface IDividendDistributor {
-    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution, bool _etfEnabled) external;
-    function setShare(address shareholder, uint256 amount) external;
-    function deposit() external payable;
-    function process(uint256 gas) external;
-}
-
-contract DividendDistributor is IDividendDistributor {
-    using SafeMath for uint256;
-
-    address _token;
-
-    struct Share {
-        uint256 amount;
-        uint256 totalExcludedBNB;
-        uint256 totalRealisedBNB;
-        uint256 totalExcludedUtility;
-        uint256 totalRealisedUtility;
-    }
-
-    IBEP20 UTILITY = IBEP20(0x0000000000000000000000000000000000000000);
-    IBEP20 SHIP = IBEP20(0x0000000000000000000000000000000000000000);
-    address WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
-
-    uint256 rewardUtilityFee = 2000;
-    uint256 feeDenominator = 10000;
-
-    IDEXRouter router;
-
-    address[] shareholders;
-    mapping (address => uint256) shareholderIndexes;
-    mapping (address => uint256) shareholderClaims;
-
-    mapping (address => Share) public shares;
-
-    uint256 public totalShares;
-
-    uint256 public totalDividendsBNB;
-    uint256 public totalDistributedBNB;
-    uint256 public dividendsPerShareBNB;
-
-    uint256 public totalDividendsUtility;
-    uint256 public totalDistributedUtility;
-    uint256 public dividendsPerShareUtility;
-
-    uint256 public dividendsPerShareAccuracyFactor = 10 ** 36;
-
-    uint256 public minPeriod = 1 hours;
-    uint256 public minDistributionBNB = 1 * (10 ** 10);
-    uint256 public etfEnabled = false;
-
-    uint256 currentIndex;
-
-    bool initialized;
-    modifier initialization() {
-        require(!initialized);
-        _;
-        initialized = true;
-    }
-
-    modifier onlyToken() {
-        require(msg.sender == _token); _;
-    }
-
-    constructor (address _router) {
-        router = _router != address(0)
-            ? IDEXRouter(_router)
-            : IDEXRouter(0x10ED43C718714eb63d5aA57B78B54704E256024E);
-        _token = msg.sender;
-    }
-
-    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution, bool _etfEnabled) external override onlyToken {
-        minPeriod = _minPeriod;
-        minDistributionBNB = _minDistribution;
-        etfEnabled = _etfEnabled;
-    }
-
-    function setShare(address shareholder, uint256 amount) external override onlyToken {
-        if(shares[shareholder].amount > 0){
-            distributeDividend(shareholder);
-        }
-
-        if(amount > 0 && shares[shareholder].amount == 0){
-            addShareholder(shareholder);
-        }else if(amount == 0 && shares[shareholder].amount > 0){
-            removeShareholder(shareholder);
-        }
-
-        totalShares = totalShares.sub(shares[shareholder].amount).add(amount);
-        shares[shareholder].amount = amount;
-        shares[shareholder].totalExcludedBNB = getCumulativeDividends(shares[shareholder].amount, dividendsPerShareBNB);
-        shares[shareholder].totalExcludedUtility = getCumulativeDividends(shares[shareholder].amount, dividendsPerShareUtility);
-    }
-
-    function deposit() external payable override onlyToken {
-        uint256 etfFee = 0; 
-        if (etfEnabled) {
-            uint256 balanceBefore = UTILITY.balanceOf(address(this));
-
-            address[] memory path = new address[](2);
-            path[0] = WBNB;
-            path[1] = address(UTILITY);
-
-            etfFee = msg.value.mul(rewardUtilityFee).div(feeDenominator);
-
-            router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: etfFee}(
-                0,
-                path,
-                address(this),
-                block.timestamp
-            );
-
-            uint256 amount = UTILITY.balanceOf(address(this)).sub(balanceBefore);
-
-            totalDividendsUtility = totalDividendsUtility.add(amount);
-            dividendsPerShareUtility = dividendsPerShareUtility.add(dividendsPerShareAccuracyFactor.mul(amount).div(totalShares));
-        }
-        totalDividendsBNB = totalDividendsBNB.add(msg.value.sub(etfFee));
-        dividendsPerShareBNB = dividendsPerShareBNB.add(dividendsPerShareAccuracyFactor.mul(amount).div(totalShares));
-    }
-
-    function process(uint256 gas) external override onlyToken {
-        uint256 shareholderCount = shareholders.length;
-
-        if(shareholderCount == 0) { return; }
-
-        uint256 gasUsed = 0;
-        uint256 gasLeft = gasleft();
-
-        uint256 iterations = 0;
-
-        while(gasUsed < gas && iterations < shareholderCount) {
-            if(currentIndex >= shareholderCount){
-                currentIndex = 0;
-            }
-
-            if(shouldDistribute(shareholders[currentIndex])){
-                distributeDividend(shareholders[currentIndex]);
-            }
-
-            gasUsed = gasUsed.add(gasLeft.sub(gasleft()));
-            gasLeft = gasleft();
-            currentIndex++;
-            iterations++;
-        }
-    }
-
-    function shouldDistribute(address shareholder) internal view returns (bool) {
-        return shareholderClaims[shareholder] + minPeriod < block.timestamp
-                && getUnpaidEarnings(shareholder) > minDistribution || ;
-    }
-
-    function distributeDividend(address shareholder) internal {
-        if(shares[shareholder].amount == 0){ return; }
-
-        if(etfEnabled) {
-            uint256 amountUtility = getUnpaidEarnings(shareholder, dividendsPerShareUtility, shares[shareholder].totalExcludedUtility);
-            if(amountUtility > 0){
-                totalDistributed = totalDistributedUtility.add(amountUtility);
-                UTILITY.transfer(shareholder, amountUtility);
-                shares[shareholder].totalRealisedUtility = shares[shareholder].totalRealisedUtility.add(amount);
-                shares[shareholder].totalExcludedUtility = getCumulativeDividends(shares[shareholder].amount, dividendsPerShareUtility);
-            }
-        }
-        uint256 amountBNB = getUnpaidEarnings(shareholder, dividendsPerShareBNB, shares[shareholder].totalExcludedBNB);
-        if(amountBNB > 0){
-            totalDistributedBNB = totalDistributedBNB.add(amountBNB);
-            (bool success,) = shareholder.call{value: amountBNB, gas: 3000}("");
-            shareholderClaims[shareholder] = block.timestamp;
-            shares[shareholder].totalRealisedBNB = shares[shareholder].totalRealisedBNB.add(amount);
-            shares[shareholder].totalExcludedBNB = getCumulativeDividends(shares[shareholder].amount, dividendsPerShareBNB);
-        }
-    }
-    
-    function claimDividend() external {
-        distributeDividend(msg.sender);
-    }
-
-    function getUnpaidEarnings(address shareholder, dividendsPerShare, shareholderTotalExcluded) public view returns (uint256) {
-        if(shares[shareholder].amount == 0){ return 0; }
-
-        uint256 shareholderTotalDividends = getCumulativeDividends(shares[shareholder].amount, dividendsPerShare);
-
-        if(shareholderTotalDividends <= shareholderTotalExcluded){ return 0; }
-
-        return shareholderTotalDividends.sub(shareholderTotalExcluded);
-    }
-
-    function getCumulativeDividends(uint256 share, dividendsPerShare) internal view returns (uint256) {
-        return share.mul(dividendsPerShare).div(dividendsPerShareAccuracyFactor);
-    }
-
-    function addShareholder(address shareholder) internal {
-        shareholderIndexes[shareholder] = shareholders.length;
-        shareholders.push(shareholder);
-    }
-
-    function removeShareholder(address shareholder) internal {
-        shareholders[shareholderIndexes[shareholder]] = shareholders[shareholders.length-1];
-        shareholderIndexes[shareholders[shareholders.length-1]] = shareholderIndexes[shareholder];
-        shareholders.pop();
-    }
-}
-
 contract STARBOUND is IBEP20, Auth {
     using SafeMath for uint256;
 
-    address BUSD = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
+    address SHIP = 0x0000000000000000000000000000000000000000;
     address WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address DEAD = 0x000000000000000000000000000000000000dEaD;
     address ZERO = 0x0000000000000000000000000000000000000000;
@@ -408,14 +94,16 @@ contract STARBOUND is IBEP20, Auth {
     mapping (address => bool) isTxLimitExempt;
     mapping (address => bool) isDividendExempt;
 
-    uint256 liquidityFee = 400;
-    uint256 buybackFee = 400;
+    uint256 liquidityFee = 200;
+    uint256 buybackFee = 300;
     uint256 rewardFee = 400;
+    uint256 marketingFee = 300;
     uint256 shipFee = 50;
     uint256 totalFee = 1250;
     uint256 feeDenominator = 10000;
 
     address public autoLiquidityReceiver;
+    address public marketingFeeReceiver;
 
     uint256 targetLiquidity = 25;
     uint256 targetLiquidityDenominator = 100;
@@ -595,9 +283,11 @@ contract STARBOUND is IBEP20, Auth {
         uint256 amountBNBLiquidity = amountBNB.mul(dynamicLiquidityFee).div(totalBNBFee).div(2);
         uint256 amountBNBReward = amountBNB.mul(rewardFee).div(totalBNBFee);
         uint256 amountBNBShip = amountBNB.mul(shipFee).div(totalBNBFee);
+        uint256 amountBNBMarketing = amountBNB.mul(marketingFee).div(totalBNBFee);
 
         try distributor.deposit{value: amountBNBReward}() {} catch {}
-        (bool success,) = SHIP.call{value: amountBNB, gas: 3000}("");
+        (bool success,) = payable(SHIP).call{value: amountBNBShip, gas: 3000}("");
+        payable(marketingFeeReceiver).call{value: amountBNBMarketing, gas: 30000}("");
 
         if(amountToLiquify > 0){
             router.addLiquidityETH{value: amountBNBLiquidity}(
@@ -699,17 +389,20 @@ contract STARBOUND is IBEP20, Auth {
         isTxLimitExempt[holder] = exempt;
     }
 
-    function setFees(uint256 _liquidityFee, uint256 _buybackFee, uint256 _rewardFee, uint256 _feeDenominator) external authorized {
+    function setFees(uint256 _liquidityFee, uint256 _buybackFee, uint256 _rewardFee, uint256 _shipFee, uint256 _marketingFee, uint256 _feeDenominator) external authorized {
         liquidityFee = _liquidityFee;
         buybackFee = _buybackFee;
         rewardFee = _rewardFee;
-        totalFee = _liquidityFee.add(_buybackFee).add(_rewardFee);
+        shipFee = _shipFee;
+        marketingFee = _marketingFee;
+        totalFee = _liquidityFee.add(_buybackFee).add(_rewardFee).add(_shipFee).add(_marketingFee);
         feeDenominator = _feeDenominator;
         require(totalFee < feeDenominator/4);
     }
 
-    function setFeeReceivers(address _autoLiquidityReceiver) external authorized {
+    function setFeeReceivers(address _autoLiquidityReceiver, address _marketingFeeReceiver) external authorized {
         autoLiquidityReceiver = _autoLiquidityReceiver;
+        marketingFeeReceiver = _marketingFeeReceiver;
     }
 
     function setSwapBackSettings(bool _enabled, uint256 _amount) external authorized {
@@ -722,8 +415,8 @@ contract STARBOUND is IBEP20, Auth {
         targetLiquidityDenominator = _denominator;
     }
 
-    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution, bool _etfEnabled) external authorized {
-        distributor.setDistributionCriteria(_minPeriod, _minDistribution, _etfEnabled);
+    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution) external authorized {
+        distributor.setDistributionCriteria(_minPeriod, _minDistribution);
     }
 
     function setDistributorSettings(uint256 gas) external authorized {
@@ -741,6 +434,10 @@ contract STARBOUND is IBEP20, Auth {
 
     function isOverLiquified(uint256 target, uint256 accuracy) public view returns (bool) {
         return getLiquidityBacking(accuracy) > target;
+    }
+
+    function setShip(address _ship) external authorized {
+        SHIP = _ship;
     }
 
     event AutoLiquify(uint256 amountBNB, uint256 amountSTARBOUND);
