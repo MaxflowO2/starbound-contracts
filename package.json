@@ -8,7 +8,8 @@
     "lint:fix": "yarn prettier  --write ./{test,deploy,scripts}/{**/*,*}.ts ./contracts/{**/*,*}.sol",
     "test": "hardhat test",
     "prepublishOnly": "yarn lint",
-    "compile": "hardhat compile"
+    "compile": "hardhat compile",
+    "verify": "hardhat etherscan-verify"
   },
   "keywords": [],
   "author": "",
