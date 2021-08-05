@@ -1,15 +1,16 @@
-//SPDX-License-Identifier: Unlicense
-pragma solidity ^0.7.6;
+//SPDX-License-Identifier: UNLICENSED
+
+pragma solidity ^0.8.6;
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
 import '@openzeppelin/contracts/utils/Address.sol';
+import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 import './interfaces/IPancakeFactory.sol';
 import './interfaces/IPancakeRouter02.sol';
 import './libraries/Utils.sol';
 import './libraries/Structs.sol';
-import './libraries/ReentrancyGuard.sol';
 
 contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
@@ -66,6 +67,11 @@ contract Starbound is Context, IERC20, Ownable, ReentrancyGuard {
         inSwapAndLiquify = true;
         _;
         inSwapAndLiquify = false;
+    }
+
+    modifier isHuman() {
+        require(tx.origin == msg.sender, 'sorry humans only');
+        _;
     }
 
     constructor(address payable routerAddress) public {

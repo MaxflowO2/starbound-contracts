@@ -1,8 +1,9 @@
-//SPDX-License-Identifier: Unlicense
-pragma solidity ^0.7.6;
+//SPDX-License-Identifier: UNLICENSED
+
+pragma solidity ^0.8.6;
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
 import './libraries/TransferHelper.sol';
 import './libraries/Whitelistable.sol';
@@ -194,7 +195,7 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
      *
      */
     function withdrawBnb() external onlyOwner {
-        _msgSender().transfer(address(this).balance);
+        payable(_msgSender()).transfer(address(this).balance);
     }
 
     /**
