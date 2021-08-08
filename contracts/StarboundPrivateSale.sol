@@ -50,7 +50,7 @@ contract StarboundPrivateSale is Ownable, Whitelistable {
         uint256 _hardCap,
         address _tokenOut,
         uint256 _pricePresale
-    ) public {
+    ) {
         require(_softCap < _hardCap, 'StarboundPrivateSale: softCap cannot be higher than hardCap');
         require(_startDate < _endDate, 'StarboundPrivateSale: startDate cannot be after endDate');
         require(_endDate > block.timestamp, 'StarboundPrivateSale: endDate must be in the future');
