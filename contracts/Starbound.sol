@@ -59,6 +59,9 @@ contract Starbound is Context, Ownable, IERC20 {
 
     uint256 public launchedAt;
 
+    uint256 public feeExemptStartAt;
+    uint256 public feeExemptLength = 60 minutes;
+
     DividendDistributor public distributor;
     uint256 private distributorGas = 500000;
 
@@ -71,7 +74,7 @@ contract Starbound is Context, Ownable, IERC20 {
         inSwap = false;
     }
 
-    constructor() {
+    constructor(address[] memory _presaleContracts) {
         // PancakeswapRouter mainnet
         router = IDEXRouter(0x10ED43C718714eb63d5aA57B78B54704E256024E);
         pair = IDEXFactory(router.factory()).createPair(WBNB, address(this));
@@ -81,6 +84,12 @@ contract Starbound is Context, Ownable, IERC20 {
 
         isFeeExempt[msg.sender] = true;
         isTxLimitExempt[msg.sender] = true;
+
+        for (uint256 i=0; i < _presaleContracts.length; i++) {
+            isFeeExempt[_presaleContracts[i]] = true;
+            isTxLimitExempt[_presaleContracts[i]] = true;
+            isDividendExempt[_presaleContracts[i]] = true;
+        }
 
         isDividendExempt[pair] = true;
         isDividendExempt[address(this)] = true;
@@ -171,10 +180,17 @@ contract Starbound is Context, Ownable, IERC20 {
         return !isFeeExempt[sender];
     }
 
+    function getTotalFee(bool buying) public view returns (uint256) {
+        if(buying && feeExemptStartAt.add(feeExemptLength) > block.timestamp) {
+            return economyTicketFee.add(businessTicketFee);
+        }
+        return totalFee;
+    }
+
     function takeFee(address sender, uint256 amount) internal returns (uint256) {
         // take bnb fee
         // take 
-        uint256 feeAmount = amount.mul(totalFee).div(feeDenominator);
+        uint256 feeAmount = amount.mul(getTotalFee(sender == pair)).div(feeDenominator);
 
         _balances[address(this)] = _balances[address(this)].add(feeAmount);
         emit Transfer(sender, address(this), feeAmount);
@@ -225,7 +241,7 @@ contract Starbound is Context, Ownable, IERC20 {
     }
 
     function setTxLimit(uint256 amount) external onlyOwner {
-        require(amount >= _totalSupply / 2000, 'Starbound: below allowed _maxTxAmount');
+        require(amount >= _totalSupply / 2000);
         _maxTxAmount = amount;
     }
 
@@ -251,14 +267,6 @@ contract Starbound is Context, Ownable, IERC20 {
         isBlacklisted[holder] = blacklisted;
     }
 
-    function setBatchExempt(address[] calldata holders, bool exempt) external onlyOwner {
-        for (uint256 i=0; i < holders.length; i++) {
-            isFeeExempt[holders[i]] = exempt;
-            isTxLimitExempt[holders[i]] = exempt;
-            isDividendExempt[holders[i]] = exempt;
-        }
-    }
-
     function setFees(
         uint256 _reflectionFee,
         uint256 _marketingFee,
@@ -266,7 +274,7 @@ contract Starbound is Context, Ownable, IERC20 {
         uint256 _businessTicketFee,
         uint256 _feeDenominator
     ) external onlyOwner {
-        _reflectionFee = _reflectionFee;
+        reflectionFee = _reflectionFee;
         marketingFee = _marketingFee;
         economyTicketFee = _economyTicketFee;
         businessTicketFee = _businessTicketFee;
@@ -294,5 +302,15 @@ contract Starbound is Context, Ownable, IERC20 {
     function setDistributorSettings(uint256 gas) external onlyOwner {
         require(gas < 750000);
         distributorGas = gas;
+    }
+
+    function setFeeExemptSettings(uint256 startAt, uint256 length) external onlyOwner {
+        require(startAt > block.timestamp);
+        feeExemptStartAt = startAt;
+        feeExemptLength = length;
+    }
+
+    function clearFeeExempt() external onlyOwner {
+        feeExemptStartAt = 0;
     }
 }
