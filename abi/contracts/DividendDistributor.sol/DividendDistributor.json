@@ -1,12 +1,6 @@
 [
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_router",
-        "type": "address"
-      }
-    ],
+    "inputs": [],
     "stateMutability": "nonpayable",
     "type": "constructor"
   },

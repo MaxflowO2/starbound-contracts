@@ -80,7 +80,7 @@ contract Starbound is Context, Ownable, IERC20 {
         pair = IDEXFactory(router.factory()).createPair(WBNB, address(this));
         _allowances[address(this)][address(router)] = type(uint256).max;
 
-        distributor = new DividendDistributor(address(router));
+        distributor = new DividendDistributor();
 
         isFeeExempt[msg.sender] = true;
         isTxLimitExempt[msg.sender] = true;

@@ -5,7 +5,6 @@ pragma solidity ^0.8.6;
 import '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 import './libraries/TransferHelper.sol';
-import './interfaces/IDEXRouter.sol';
 import './interfaces/IDividendDistributor.sol';
 
 contract DividendDistributor is IDividendDistributor, ReentrancyGuard {
@@ -18,8 +17,6 @@ contract DividendDistributor is IDividendDistributor, ReentrancyGuard {
         uint256 totalExcluded;
         uint256 totalRealised;
     }
-
-    IDEXRouter router;
 
     address[] shareholders;
     mapping(address => uint256) shareholderIndexes;
@@ -50,10 +47,7 @@ contract DividendDistributor is IDividendDistributor, ReentrancyGuard {
         _;
     }
 
-    constructor(address _router) {
-        router = _router != address(0)
-            ? IDEXRouter(_router)
-            : IDEXRouter(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+    constructor() {
         _token = msg.sender;
     }
 
