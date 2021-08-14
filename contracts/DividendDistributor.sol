@@ -35,13 +35,6 @@ contract DividendDistributor is IDividendDistributor, ReentrancyGuard {
 
     uint256 currentIndex;
 
-    bool initialized;
-    modifier initialization() {
-        require(!initialized);
-        _;
-        initialized = true;
-    }
-
     modifier onlyToken() {
         require(msg.sender == _token);
         _;
@@ -73,9 +66,8 @@ contract DividendDistributor is IDividendDistributor, ReentrancyGuard {
     }
 
     function deposit() external payable override onlyToken {
-        uint256 amount = msg.value;
-        totalDividends = totalDividends.add(amount);
-        dividendsPerShare = dividendsPerShare.add(dividendsPerShareAccuracyFactor.mul(amount).div(totalShares));
+        totalDividends = totalDividends.add(msg.value);
+        dividendsPerShare = dividendsPerShare.add(dividendsPerShareAccuracyFactor.mul(msg.value).div(totalShares));
     }
 
     function process(uint256 gas) external override onlyToken {

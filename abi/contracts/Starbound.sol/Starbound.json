@@ -238,6 +238,19 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "getTicketFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "bool",
@@ -613,6 +626,19 @@
     "name": "setTxLimit",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "shipDistributor",
+    "outputs": [
+      {
+        "internalType": "contract ShipDividendDistributor",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

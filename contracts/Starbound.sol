@@ -23,6 +23,7 @@ import './interfaces/IERC20.sol';
 import './interfaces/IDEXFactory.sol';
 import './interfaces/IDEXRouter.sol';
 import './DividendDistributor.sol';
+import './ShipDividendDistributor.sol';
 
 contract Starbound is Context, Ownable, IERC20 {
     using SafeMath for uint256;
@@ -30,6 +31,8 @@ contract Starbound is Context, Ownable, IERC20 {
     address private constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
     address private constant ZERO = address(0);
+    address private constant ECONOMY_TICKET = address(0);
+    address private constant BUSINESS_TICKET = address(0);
 
     string constant _name = "Starbound";
     string constant _symbol = "SBD";
@@ -65,6 +68,8 @@ contract Starbound is Context, Ownable, IERC20 {
     DividendDistributor public distributor;
     uint256 private distributorGas = 500000;
 
+    ShipDividendDistributor public shipDistributor;
+
     bool public swapEnabled = true;
     uint256 public swapThreshold = _totalSupply / 20000; // 0.005%
     bool inSwap;
@@ -81,6 +86,7 @@ contract Starbound is Context, Ownable, IERC20 {
         _allowances[address(this)][address(router)] = type(uint256).max;
 
         distributor = new DividendDistributor();
+        shipDistributor = new ShipDividendDistributor(ECONOMY_TICKET, BUSINESS_TICKET);
 
         isFeeExempt[msg.sender] = true;
         isTxLimitExempt[msg.sender] = true;
@@ -180,9 +186,13 @@ contract Starbound is Context, Ownable, IERC20 {
         return !isFeeExempt[sender];
     }
 
+    function getTicketFee() public view returns (uint256) {
+        return economyTicketFee.add(businessTicketFee);
+    }
+
     function getTotalFee(bool buying) public view returns (uint256) {
         if(buying && feeExemptStartAt.add(feeExemptLength) > block.timestamp) {
-            return economyTicketFee.add(businessTicketFee);
+            return getTicketFee();
         }
         return totalFee;
     }
@@ -190,10 +200,23 @@ contract Starbound is Context, Ownable, IERC20 {
     function takeFee(address sender, uint256 amount) internal returns (uint256) {
         // take bnb fee
         // take 
+        uint256 economyTicketFeeAmount = amount.mul(economyTicketFee).div(feeDenominator);
+        uint256 businessTicketFeeAmount = amount.mul(businessTicketFee).div(feeDenominator);
+        uint256 ticketFeeAmount = economyTicketFeeAmount.add(businessTicketFeeAmount);
         uint256 feeAmount = amount.mul(getTotalFee(sender == pair)).div(feeDenominator);
 
-        _balances[address(this)] = _balances[address(this)].add(feeAmount);
-        emit Transfer(sender, address(this), feeAmount);
+        if (ticketFeeAmount >= feeAmount) {
+            feeAmount = 0;
+        }
+
+        _balances[address(shipDistributor)] = _balances[address(shipDistributor)].add(ticketFeeAmount);
+        emit Transfer(sender, address(shipDistributor), ticketFeeAmount);
+        shipDistributor.deposit(economyTicketFeeAmount, businessTicketFeeAmount);
+
+        if (feeAmount > 0) {
+            _balances[address(this)] = _balances[address(this)].add(feeAmount);
+            emit Transfer(sender, address(this), feeAmount);
+        }
 
         return amount.sub(feeAmount);
     }
