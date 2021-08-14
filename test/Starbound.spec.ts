@@ -60,8 +60,8 @@ describe('Starbound', () => {
 
       expect(await token.marketingFeeReceiver()).to.eq(owner.address)
       expect(await token.launchedAt()).to.eq(0)
-      expect(await token.swapThreshold()).to.eq(totalSupply.div(20000))
-      expect(await token.swapEnabled()).to.be.true
+      expect(await token.swapBackThreshold()).to.eq(totalSupply.div(20000))
+      expect(await token.swapBackEnabled()).to.be.true
 
       const pair = await token.pair()
       expect(await token.isDividendExempt(pair)).to.be.true
@@ -73,8 +73,6 @@ describe('Starbound', () => {
       expect(await token.isTxLimitExempt(owner.address)).to.be.true
       expect(await token.isFeeExempt(alice.address)).to.be.false
       expect(await token.isTxLimitExempt(alice.address)).to.be.false
-
-      expect(await token.isBlacklisted(alice.address)).to.be.false
     })
   })
 
@@ -123,15 +121,6 @@ describe('Starbound', () => {
       })
     })
 
-    describe('#setIsBlacklisted', () => {
-      it('sets isBlacklisted correctly', async () => {
-        await token.setIsBlacklisted(alice.address, true)
-        expect(await token.isBlacklisted(alice.address)).to.be.true
-        await token.setIsBlacklisted(alice.address, false)
-        expect(await token.isBlacklisted(alice.address)).to.be.false
-      })
-    })
-
     describe('#setFees', () => {
       it('sets fees correctly', async () => {
         expect(await token.totalFee()).to.eq(900)
@@ -152,14 +141,14 @@ describe('Starbound', () => {
 
     describe('#setSwapBackSettings', () => {
       it('sets swapback settings correctly', async () => {
-        expect(await token.swapEnabled()).to.be.true
-        expect(await token.swapThreshold()).to.eq(ethers.utils.parseUnits('50000', DECIMALS))
+        expect(await token.swapBackEnabled()).to.be.true
+        expect(await token.swapBackThreshold()).to.eq(ethers.utils.parseUnits('50000', DECIMALS))
         await token.setSwapBackSettings(false, ethers.utils.parseUnits('100000', DECIMALS))
-        expect(await token.swapEnabled()).to.be.false
-        expect(await token.swapThreshold()).to.eq(ethers.utils.parseUnits('100000', DECIMALS))
+        expect(await token.swapBackEnabled()).to.be.false
+        expect(await token.swapBackThreshold()).to.eq(ethers.utils.parseUnits('100000', DECIMALS))
         await token.setSwapBackSettings(true, ethers.utils.parseUnits('150000', DECIMALS))
-        expect(await token.swapEnabled()).to.be.true
-        expect(await token.swapThreshold()).to.eq(ethers.utils.parseUnits('150000', DECIMALS))
+        expect(await token.swapBackEnabled()).to.be.true
+        expect(await token.swapBackThreshold()).to.eq(ethers.utils.parseUnits('150000', DECIMALS))
       })
     })
 
