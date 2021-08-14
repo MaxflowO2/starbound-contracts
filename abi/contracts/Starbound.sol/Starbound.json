@@ -238,19 +238,6 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "getTicketFee",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "bool",
@@ -264,25 +251,6 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "isBlacklisted",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
       }
     ],
     "stateMutability": "view",
@@ -534,24 +502,6 @@
       },
       {
         "internalType": "bool",
-        "name": "blacklisted",
-        "type": "bool"
-      }
-    ],
-    "name": "setIsBlacklisted",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "holder",
-        "type": "address"
-      },
-      {
-        "internalType": "bool",
         "name": "exempt",
         "type": "bool"
       }
@@ -643,7 +593,7 @@
   },
   {
     "inputs": [],
-    "name": "swapEnabled",
+    "name": "swapBackEnabled",
     "outputs": [
       {
         "internalType": "bool",
@@ -656,7 +606,7 @@
   },
   {
     "inputs": [],
-    "name": "swapThreshold",
+    "name": "swapBackThreshold",
     "outputs": [
       {
         "internalType": "uint256",

@@ -34,17 +34,16 @@ contract Starbound is Context, Ownable, IERC20 {
     address private constant ECONOMY_TICKET = address(0);
     address private constant BUSINESS_TICKET = address(0);
 
-    string constant _name = "Starbound";
-    string constant _symbol = "SBD";
+    string constant _name = 'Starbound';
+    string constant _symbol = 'SBD';
     uint8 constant _decimals = 9;
-    uint256 _totalSupply = 1000000000 * (10 ** _decimals); // 1,000,000,000
-    mapping (address => uint256) _balances;
-    mapping (address => mapping (address => uint256)) _allowances;
+    uint256 _totalSupply = 1000000000 * (10**_decimals); // 1,000,000,000
+    mapping(address => uint256) _balances;
+    mapping(address => mapping(address => uint256)) _allowances;
 
-    mapping (address => bool) public isFeeExempt;
-    mapping (address => bool) public isTxLimitExempt;
-    mapping (address => bool) public isDividendExempt;
-    mapping (address => bool) public isBlacklisted;
+    mapping(address => bool) public isFeeExempt;
+    mapping(address => bool) public isTxLimitExempt;
+    mapping(address => bool) public isDividendExempt;
 
     uint256 public _maxTxAmount = _totalSupply / 2000; // 0.05%
 
@@ -63,15 +62,15 @@ contract Starbound is Context, Ownable, IERC20 {
     uint256 public launchedAt;
 
     uint256 public feeExemptStartAt;
-    uint256 public feeExemptLength = 60 minutes;
+    uint256 public feeExemptLength;
 
     DividendDistributor public distributor;
     uint256 private distributorGas = 500000;
 
     ShipDividendDistributor public shipDistributor;
 
-    bool public swapEnabled = true;
-    uint256 public swapThreshold = _totalSupply / 20000; // 0.005%
+    bool public swapBackEnabled = true;
+    uint256 public swapBackThreshold = _totalSupply / 20000; // 0.005%
     bool inSwap;
     modifier swapping() {
         inSwap = true;
@@ -91,7 +90,7 @@ contract Starbound is Context, Ownable, IERC20 {
         isFeeExempt[msg.sender] = true;
         isTxLimitExempt[msg.sender] = true;
 
-        for (uint256 i=0; i < _presaleContracts.length; i++) {
+        for (uint256 i = 0; i < _presaleContracts.length; i++) {
             isFeeExempt[_presaleContracts[i]] = true;
             isTxLimitExempt[_presaleContracts[i]] = true;
             isDividendExempt[_presaleContracts[i]] = true;
@@ -108,14 +107,31 @@ contract Starbound is Context, Ownable, IERC20 {
         emit Transfer(ZERO, msg.sender, _totalSupply);
     }
 
-    receive() external payable { }
+    receive() external payable {}
 
-    function totalSupply() external view override returns (uint256) { return _totalSupply; }
-    function decimals() external pure override returns (uint8) { return _decimals; }
-    function symbol() external pure override returns (string memory) { return _symbol; }
-    function name() external pure override returns (string memory) { return _name; }
-    function balanceOf(address account) public view override returns (uint256) { return _balances[account]; }
-    function allowance(address holder, address spender) external view override returns (uint256) { return _allowances[holder][spender]; }
+    function totalSupply() external view override returns (uint256) {
+        return _totalSupply;
+    }
+
+    function decimals() external pure override returns (uint8) {
+        return _decimals;
+    }
+
+    function symbol() external pure override returns (string memory) {
+        return _symbol;
+    }
+
+    function name() external pure override returns (string memory) {
+        return _name;
+    }
+
+    function balanceOf(address account) public view override returns (uint256) {
+        return _balances[account];
+    }
+
+    function allowance(address holder, address spender) external view override returns (uint256) {
+        return _allowances[holder][spender];
+    }
 
     function approve(address spender, uint256 amount) public override returns (bool) {
         _allowances[msg.sender][spender] = amount;
@@ -131,17 +147,23 @@ contract Starbound is Context, Ownable, IERC20 {
         return _transferFrom(msg.sender, recipient, amount);
     }
 
-    function transferFrom(address sender, address recipient, uint256 amount) external override returns (bool) {
-        if(_allowances[sender][msg.sender] != type(uint256).max){
-            _allowances[sender][msg.sender] = _allowances[sender][msg.sender].sub(amount, "Insufficient Allowance");
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external override returns (bool) {
+        if (_allowances[sender][msg.sender] != type(uint256).max) {
+            _allowances[sender][msg.sender] = _allowances[sender][msg.sender].sub(amount, 'Insufficient Allowance');
         }
 
         return _transferFrom(sender, recipient, amount);
     }
 
-    function _transferFrom(address sender, address recipient, uint256 amount) internal returns (bool) {
-        require(!isBlacklisted[sender] && !isBlacklisted[recipient], "BLACKLISTED!");
-
+    function _transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) internal returns (bool) {
         if (inSwap) {
             return _basicTransfer(sender, recipient, amount);
         }
@@ -157,13 +179,17 @@ contract Starbound is Context, Ownable, IERC20 {
             launch();
         }
 
-        _balances[sender] = _balances[sender].sub(amount, "Insufficient Balance");
+        _balances[sender] = _balances[sender].sub(amount, 'Insufficient Balance');
 
         uint256 amountReceived = shouldTakeFee(sender) ? takeFee(sender, amount) : amount;
         _balances[recipient] = _balances[recipient].add(amountReceived);
 
-        if (!isDividendExempt[sender]) { try distributor.setShare(sender, _balances[sender]) {} catch {} }
-        if (!isDividendExempt[recipient]) { try distributor.setShare(recipient, _balances[recipient]) {} catch {} }
+        if (!isDividendExempt[sender]) {
+            try distributor.setShare(sender, _balances[sender]) {} catch {}
+        }
+        if (!isDividendExempt[recipient]) {
+            try distributor.setShare(recipient, _balances[recipient]) {} catch {}
+        }
 
         try distributor.process(distributorGas) {} catch {}
 
@@ -171,35 +197,45 @@ contract Starbound is Context, Ownable, IERC20 {
         return true;
     }
 
-    function _basicTransfer(address sender, address recipient, uint256 amount) internal returns (bool) {
-        _balances[sender] = _balances[sender].sub(amount, "Insufficient Balance");
+    function _basicTransfer(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) internal returns (bool) {
+        _balances[sender] = _balances[sender].sub(amount, 'Insufficient Balance');
         _balances[recipient] = _balances[recipient].add(amount);
         emit Transfer(sender, recipient, amount);
         return true;
     }
 
     function checkTxLimit(address sender, uint256 amount) internal view {
-        require(amount <= _maxTxAmount || isTxLimitExempt[sender], "TX Limit Exceeded");
+        require(amount <= _maxTxAmount || isTxLimitExempt[sender], 'TX Limit Exceeded');
     }
 
     function shouldTakeFee(address sender) internal view returns (bool) {
         return !isFeeExempt[sender];
     }
 
-    function getTicketFee() public view returns (uint256) {
-        return economyTicketFee.add(businessTicketFee);
-    }
-
     function getTotalFee(bool buying) public view returns (uint256) {
-        if(buying && feeExemptStartAt.add(feeExemptLength) > block.timestamp) {
-            return getTicketFee();
+        if (launchedAt + 1 >= block.number) {
+            return feeDenominator.sub(1);
+        }
+
+        if (
+            buying &&
+            feeExemptStartAt != 0 &&
+            feeExemptStartAt <= block.timestamp &&
+            feeExemptStartAt.add(feeExemptLength) >= block.timestamp
+        ) {
+            return economyTicketFee.add(businessTicketFee);
         }
         return totalFee;
     }
 
-    function takeFee(address sender, uint256 amount) internal returns (uint256) {
-        // take bnb fee
-        // take 
+    function takeFee(
+        address sender,
+        uint256 amount
+    ) internal returns (uint256) {
         uint256 economyTicketFeeAmount = amount.mul(economyTicketFee).div(feeDenominator);
         uint256 businessTicketFeeAmount = amount.mul(businessTicketFee).div(feeDenominator);
         uint256 ticketFeeAmount = economyTicketFeeAmount.add(businessTicketFeeAmount);
@@ -222,14 +258,11 @@ contract Starbound is Context, Ownable, IERC20 {
     }
 
     function shouldSwapBack() internal view returns (bool) {
-        return msg.sender != pair
-        && !inSwap
-        && swapEnabled
-        && _balances[address(this)] >= swapThreshold;
+        return msg.sender != pair && !inSwap && swapBackEnabled && _balances[address(this)] >= swapBackThreshold;
     }
 
     function swapBack() internal swapping {
-        uint256 amountToSwap = swapThreshold;
+        uint256 amountToSwap = swapBackThreshold;
 
         address[] memory path = new address[](2);
         path[0] = address(this);
@@ -286,10 +319,6 @@ contract Starbound is Context, Ownable, IERC20 {
         isTxLimitExempt[holder] = exempt;
     }
 
-    function setIsBlacklisted(address holder, bool blacklisted) external onlyOwner {
-        isBlacklisted[holder] = blacklisted;
-    }
-
     function setFees(
         uint256 _reflectionFee,
         uint256 _marketingFee,
@@ -301,12 +330,9 @@ contract Starbound is Context, Ownable, IERC20 {
         marketingFee = _marketingFee;
         economyTicketFee = _economyTicketFee;
         businessTicketFee = _businessTicketFee;
-        totalFee = _reflectionFee
-            .add(_marketingFee)
-            .add(_economyTicketFee)
-            .add(_businessTicketFee);
+        totalFee = _reflectionFee.add(_marketingFee).add(_economyTicketFee).add(_businessTicketFee);
         feeDenominator = _feeDenominator;
-        require(totalFee < feeDenominator/5);
+        require(totalFee < feeDenominator / 5);
     }
 
     function setFeeReceivers(address _marketingFeeReceiver) external onlyOwner {
@@ -314,8 +340,8 @@ contract Starbound is Context, Ownable, IERC20 {
     }
 
     function setSwapBackSettings(bool _enabled, uint256 _amount) external onlyOwner {
-        swapEnabled = _enabled;
-        swapThreshold = _amount;
+        swapBackEnabled = _enabled;
+        swapBackThreshold = _amount;
     }
 
     function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution) external onlyOwner {

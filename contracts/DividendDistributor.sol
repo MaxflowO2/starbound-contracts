@@ -73,7 +73,9 @@ contract DividendDistributor is IDividendDistributor, ReentrancyGuard {
     function process(uint256 gas) external override onlyToken {
         uint256 shareholderCount = shareholders.length;
 
-        if (shareholderCount == 0) { return; }
+        if (shareholderCount == 0) {
+            return;
+        }
 
         uint256 gasUsed = 0;
         uint256 gasLeft = gasleft();

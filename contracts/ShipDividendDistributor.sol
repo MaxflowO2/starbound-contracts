@@ -33,23 +33,21 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
         uint256 dividendsPerShare;
     }
 
-    mapping (uint256 => Share) public economyShares;
+    mapping(uint256 => Share) public economyShares;
     ShareInfo public economyShareInfo;
 
-    mapping (uint256 => Share) public businessShares;
+    mapping(uint256 => Share) public businessShares;
     ShareInfo public businessShareInfo;
 
-    uint256 public dividendsPerShareAccuracyFactor = 10 ** 36;
+    uint256 public dividendsPerShareAccuracyFactor = 1e9;
+    uint256 totalDistributed;
 
     modifier onlyToken() {
         require(msg.sender == _token);
         _;
     }
 
-    constructor(
-        address _economyTicketNFT,
-        address _businessTicketNFT
-    ) {
+    constructor(address _economyTicketNFT, address _businessTicketNFT) {
         _token = msg.sender;
 
         token = IERC20(_token);
@@ -57,13 +55,13 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
         businessTicketNFT = IShipTicketNFT(_businessTicketNFT);
 
         economyShareInfo = ShareInfo({
-            totalShares: economyTicketNFT.totalSupply(),
+            totalShares: economyTicketNFT.MintedNFT(),
             totalDividends: 0,
             totalDistributed: 0,
             dividendsPerShare: 0
         });
         businessShareInfo = ShareInfo({
-            totalShares: businessTicketNFT.totalSupply(),
+            totalShares: businessTicketNFT.MintedNFT(),
             totalDividends: 0,
             totalDistributed: 0,
             dividendsPerShare: 0
@@ -71,7 +69,7 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
     }
 
     function deposit(uint256 _economyAmount, uint256 _businessAmount) external override onlyToken {
-        uint256 totalShares = economyTicketNFT.totalSupply();
+        uint256 totalShares = economyTicketNFT.MintedNFT();
         uint256 dividendsPerShare = economyShareInfo.dividendsPerShare.add(
             _economyAmount.mul(dividendsPerShareAccuracyFactor).div(totalShares)
         );
@@ -79,7 +77,7 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
         economyShareInfo.totalDividends = economyShareInfo.totalDividends.add(_economyAmount);
         economyShareInfo.dividendsPerShare = dividendsPerShare;
 
-        totalShares = businessTicketNFT.totalSupply();
+        totalShares = businessTicketNFT.MintedNFT();
         dividendsPerShare = businessShareInfo.dividendsPerShare.add(
             _businessAmount.mul(dividendsPerShareAccuracyFactor).div(totalShares)
         );
@@ -91,7 +89,9 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
     function validateEconomyTicket(uint256 ticketId) public {
         require(economyTicketNFT.ownerOf(ticketId) != address(0), 'ShipDividendDistributor: Invalid ticketId');
 
-        if (economyShares[ticketId].validated == true) { return; }
+        if (economyShares[ticketId].validated == true) {
+            return;
+        }
         economyShares[ticketId].validated = true;
         economyShares[ticketId].dividendsDebt = economyShareInfo.dividendsPerShare;
     }
@@ -101,6 +101,7 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
 
         uint256 amount = getEconomyUnpaidEarnings(ticketId);
         if (amount > 0) {
+            totalDistributed = totalDistributed.add(amount);
             economyShareInfo.totalDistributed = economyShareInfo.totalDistributed.add(amount);
             economyShares[ticketId].totalRealised = economyShares[ticketId].totalRealised.add(amount);
             economyShares[ticketId].dividendsDebt = economyShareInfo.dividendsPerShare;
@@ -109,17 +110,22 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
     }
 
     function getEconomyUnpaidEarnings(uint256 ticketId) public view returns (uint256) {
-        if (economyShares[ticketId].validated != true) { return 0; }
+        if (economyShares[ticketId].validated != true) {
+            return 0;
+        }
 
-        return economyShareInfo.dividendsPerShare
-            .sub(economyShares[ticketId].dividendsDebt)
-            .div(dividendsPerShareAccuracyFactor);
+        return
+            economyShareInfo.dividendsPerShare.sub(economyShares[ticketId].dividendsDebt).div(
+                dividendsPerShareAccuracyFactor
+            );
     }
 
     function validateBusinessTicket(uint256 ticketId) public {
         require(businessTicketNFT.ownerOf(ticketId) != address(0), 'ShipDividendDistributor: Invalid ticketId');
 
-        if (businessShares[ticketId].validated == true) { return; }
+        if (businessShares[ticketId].validated == true) {
+            return;
+        }
         businessShares[ticketId].validated = true;
         businessShares[ticketId].dividendsDebt = businessShareInfo.dividendsPerShare;
     }
@@ -137,24 +143,27 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
     }
 
     function getBusinessUnpaidEarnings(uint256 ticketId) public view returns (uint256) {
-        if (businessShares[ticketId].validated != true) { return 0; }
+        if (businessShares[ticketId].validated != true) {
+            return 0;
+        }
 
-        return businessShareInfo.dividendsPerShare
-            .sub(businessShares[ticketId].dividendsDebt)
-            .div(dividendsPerShareAccuracyFactor);
+        return
+            businessShareInfo.dividendsPerShare.sub(businessShares[ticketId].dividendsDebt).div(
+                dividendsPerShareAccuracyFactor
+            );
     }
 
     function validateTickets() external nonReentrant {
-        for (uint256 i = 0; i < economyTicketNFT.totalSupply(); i++) {
+        for (uint256 i = 0; i < economyTicketNFT.MintedNFT(); i++) {
             validateEconomyTicket(i);
         }
 
-        for (uint256 i = 0; i < businessTicketNFT.totalSupply(); i++) {
+        for (uint256 i = 0; i < businessTicketNFT.MintedNFT(); i++) {
             validateBusinessTicket(i);
         }
     }
 
-    function isValidated(uint256 ticketClass, uint256 ticketId) external view returns (bool)  {
+    function isValidated(uint256 ticketClass, uint256 ticketId) external view returns (bool) {
         if (ticketClass == ECONOMY) {
             return economyShares[ticketId].validated;
         }
