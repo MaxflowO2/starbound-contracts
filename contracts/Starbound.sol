@@ -42,10 +42,8 @@ contract Starbound is Context, Ownable, IERC20 {
     mapping(address => bool) public isFeeExempt;
     mapping(address => bool) public isTxLimitExempt;
     mapping(address => bool) public isDividendExempt;
-    mapping(address => uint256) public cooldowns;
-    uint256 private cooldownLength = 20 seconds;
 
-    uint256 public _maxTxAmount = _totalSupply / 2000; // 0.05%
+    uint256 public maxTxAmount = _totalSupply / 2000; // 0.05%
 
     uint256 private feeDenominator = 10000;
     uint256 private reflectionFee = 500;
@@ -167,10 +165,6 @@ contract Starbound is Context, Ownable, IERC20 {
             return _basicTransfer(sender, recipient, amount);
         }
 
-        if (sender == pair) {
-            require(cooldowns[recipient].add(cooldownLength) < block.timestamp, 'Under cooldown period');
-        }
-
         checkTxLimit(sender, amount);
 
         if (shouldSwapBack()) {
@@ -198,10 +192,6 @@ contract Starbound is Context, Ownable, IERC20 {
 
         emit Transfer(sender, recipient, amountReceived);
 
-        if (sender == pair) {
-            _setCooldown(recipient);
-        }
-
         return true;
     }
 
@@ -216,14 +206,8 @@ contract Starbound is Context, Ownable, IERC20 {
         return true;
     }
 
-    function _setCooldown(address recipient) internal {
-        if (launchedAt.add(cooldownLength) >= block.timestamp) {
-            cooldowns[recipient] = block.timestamp;
-        }
-    }
-
     function checkTxLimit(address sender, uint256 amount) internal view {
-        require(amount <= _maxTxAmount || isTxLimitExempt[sender], 'TX Limit Exceeded');
+        require(amount <= maxTxAmount || isTxLimitExempt[sender], 'TX Limit Exceeded');
     }
 
     function shouldTakeFee(address sender) internal view returns (bool) {
@@ -248,9 +232,7 @@ contract Starbound is Context, Ownable, IERC20 {
         uint256 ticketFeeAmount = economyTicketFeeAmount.add(businessTicketFeeAmount);
         uint256 feeAmount = amount.mul(getTotalFee(sender == pair)).div(feeDenominator);
 
-        if (ticketFeeAmount >= feeAmount) {
-            feeAmount = 0;
-        }
+        feeAmount = ticketFeeAmount < feeAmount ? feeAmount.sub(ticketFeeAmount) : 0;
 
         _balances[address(shipDistributor)] = _balances[address(shipDistributor)].add(ticketFeeAmount);
         emit Transfer(sender, address(shipDistributor), ticketFeeAmount);
@@ -304,7 +286,10 @@ contract Starbound is Context, Ownable, IERC20 {
     }
 
     function setTxLimit(uint256 amount) external onlyOwner {
-        _maxTxAmount = amount;
+        if (launched()) {
+            require(amount >= _totalSupply / 2000);
+        }
+        maxTxAmount = amount;
     }
 
     function setIsDividendExempt(address holder, bool exempt) public onlyOwner {
