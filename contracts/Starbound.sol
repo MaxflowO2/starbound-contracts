@@ -286,9 +286,6 @@ contract Starbound is Context, Ownable, IERC20 {
     }
 
     function setTxLimit(uint256 amount) external onlyOwner {
-        if (launched()) {
-            require(amount >= _totalSupply / 2000);
-        }
         maxTxAmount = amount;
     }
 
