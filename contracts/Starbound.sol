@@ -29,7 +29,6 @@ contract Starbound is Context, Ownable, IERC20 {
     using SafeMath for uint256;
 
     address private constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
-    // address private constant WBNB = 0xae13d989dac2f0debff460ac112a837c89baa7cd // WBNB on testnet
     address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
     address private constant ZERO = 0x0000000000000000000000000000000000000000;
 
@@ -99,6 +98,7 @@ contract Starbound is Context, Ownable, IERC20 {
         isDividendExempt[address(this)] = true;
         isDividendExempt[DEAD] = true;
         isDividendExempt[ZERO] = true;
+        isDividendExempt[msg.sender] = true;
 
         marketingFeeReceiver = msg.sender;
 
@@ -343,6 +343,7 @@ contract Starbound is Context, Ownable, IERC20 {
 
     function setFeeReceivers(address _marketingFeeReceiver) external onlyOwner {
         marketingFeeReceiver = _marketingFeeReceiver;
+        isDividendExempt[marketingFeeReceiver] = true;
     }
 
     function setSwapBackSettings(bool _enabled, uint256 _amount) external onlyOwner {

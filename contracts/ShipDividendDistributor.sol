@@ -69,21 +69,32 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
     }
 
     function deposit(uint256 _economyAmount, uint256 _businessAmount) external override onlyToken {
-        uint256 totalShares = economyTicketNFT.totalSupply();
-        uint256 dividendsPerShare = economyShareInfo.dividendsPerShare.add(
-            _economyAmount.mul(dividendsPerShareAccuracyFactor).div(totalShares)
-        );
-        economyShareInfo.totalShares = totalShares;
-        economyShareInfo.totalDividends = economyShareInfo.totalDividends.add(_economyAmount);
-        economyShareInfo.dividendsPerShare = dividendsPerShare;
+        uint256 totalShares;
+        uint256 dividendsPerShare;
 
-        totalShares = businessTicketNFT.totalSupply();
-        dividendsPerShare = businessShareInfo.dividendsPerShare.add(
-            _businessAmount.mul(dividendsPerShareAccuracyFactor).div(totalShares)
-        );
-        businessShareInfo.totalShares = totalShares;
-        businessShareInfo.totalDividends = businessShareInfo.totalDividends.add(_businessAmount);
-        businessShareInfo.dividendsPerShare = dividendsPerShare;
+        if (_economyAmount > 0) {
+            totalShares = economyTicketNFT.totalSupply();
+            if (totalShares > 0) {
+                dividendsPerShare = economyShareInfo.dividendsPerShare.add(
+                    _economyAmount.mul(dividendsPerShareAccuracyFactor).div(totalShares)
+                );
+                economyShareInfo.totalShares = totalShares;
+                economyShareInfo.totalDividends = economyShareInfo.totalDividends.add(_economyAmount);
+                economyShareInfo.dividendsPerShare = dividendsPerShare;
+            }
+        }
+
+        if (_businessAmount > 0) {
+            totalShares = businessTicketNFT.totalSupply();
+            if (totalShares > 0) {
+                dividendsPerShare = businessShareInfo.dividendsPerShare.add(
+                    _businessAmount.mul(dividendsPerShareAccuracyFactor).div(totalShares)
+                );
+                businessShareInfo.totalShares = totalShares;
+                businessShareInfo.totalDividends = businessShareInfo.totalDividends.add(_businessAmount);
+                businessShareInfo.dividendsPerShare = dividendsPerShare;
+            }
+        }
     }
 
     function validateEconomyTicket(uint256 ticketId) public {
@@ -154,11 +165,11 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
     }
 
     function validateTickets() external nonReentrant {
-        for (uint256 i = 0; i < economyTicketNFT.totalSupply(); i++) {
+        for (uint256 i = 1; i <= economyTicketNFT.totalSupply(); i++) {
             validateEconomyTicket(i);
         }
 
-        for (uint256 i = 0; i < businessTicketNFT.totalSupply(); i++) {
+        for (uint256 i = 1; i <= businessTicketNFT.totalSupply(); i++) {
             validateBusinessTicket(i);
         }
     }
