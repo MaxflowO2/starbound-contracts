@@ -39,7 +39,7 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
     mapping(uint256 => Share) public businessShares;
     ShareInfo public businessShareInfo;
 
-    uint256 public dividendsPerShareAccuracyFactor = 1e9;
+    uint256 public dividendsPerShareAccuracyFactor = 1e6;
     uint256 totalDistributed;
 
     modifier onlyToken() {
@@ -55,13 +55,13 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
         businessTicketNFT = IShipTicketNFT(_businessTicketNFT);
 
         economyShareInfo = ShareInfo({
-            totalShares: economyTicketNFT.MintedNFT(),
+            totalShares: economyTicketNFT.totalSupply(),
             totalDividends: 0,
             totalDistributed: 0,
             dividendsPerShare: 0
         });
         businessShareInfo = ShareInfo({
-            totalShares: businessTicketNFT.MintedNFT(),
+            totalShares: businessTicketNFT.totalSupply(),
             totalDividends: 0,
             totalDistributed: 0,
             dividendsPerShare: 0
@@ -69,7 +69,7 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
     }
 
     function deposit(uint256 _economyAmount, uint256 _businessAmount) external override onlyToken {
-        uint256 totalShares = economyTicketNFT.MintedNFT();
+        uint256 totalShares = economyTicketNFT.totalSupply();
         uint256 dividendsPerShare = economyShareInfo.dividendsPerShare.add(
             _economyAmount.mul(dividendsPerShareAccuracyFactor).div(totalShares)
         );
@@ -77,7 +77,7 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
         economyShareInfo.totalDividends = economyShareInfo.totalDividends.add(_economyAmount);
         economyShareInfo.dividendsPerShare = dividendsPerShare;
 
-        totalShares = businessTicketNFT.MintedNFT();
+        totalShares = businessTicketNFT.totalSupply();
         dividendsPerShare = businessShareInfo.dividendsPerShare.add(
             _businessAmount.mul(dividendsPerShareAccuracyFactor).div(totalShares)
         );
@@ -154,11 +154,11 @@ contract ShipDividendDistributor is IShipDividendDistributor, ReentrancyGuard {
     }
 
     function validateTickets() external nonReentrant {
-        for (uint256 i = 0; i < economyTicketNFT.MintedNFT(); i++) {
+        for (uint256 i = 0; i < economyTicketNFT.totalSupply(); i++) {
             validateEconomyTicket(i);
         }
 
-        for (uint256 i = 0; i < businessTicketNFT.MintedNFT(); i++) {
+        for (uint256 i = 0; i < businessTicketNFT.totalSupply(); i++) {
             validateBusinessTicket(i);
         }
     }

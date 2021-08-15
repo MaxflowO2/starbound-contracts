@@ -7,7 +7,5 @@ interface IShipTicketNFT {
 
     function balanceOf(address owner) external view returns (uint256 balance);
 
-    function MintedNFT() external view returns (uint256);
-
-    function checkOwnedTickets() external view returns (uint256[] memory);
+    function totalSupply() external view returns (uint256);
 }

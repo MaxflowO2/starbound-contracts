@@ -686,7 +686,7 @@ contract NFTokenMetadata is NFToken, ERC721Metadata {
 
 contract SampleShipTicketNFT is NFTokenMetadata, Ownable {
     mapping(address => uint256[]) private OwnedTickets;
-    uint256 public maxMintAllowed = 500;
+    uint256 public maxMintAllowed;
     uint256 public MintedNFT;
 
     constructor(
