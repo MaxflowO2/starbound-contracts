@@ -2,9 +2,19 @@
   {
     "inputs": [
       {
-        "internalType": "address[]",
-        "name": "_presaleContracts",
-        "type": "address[]"
+        "internalType": "address",
+        "name": "_router",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_economyTicket",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_businessTicket",
+        "type": "address"
       }
     ],
     "stateMutability": "nonpayable",
@@ -508,6 +518,24 @@
       }
     ],
     "name": "setFees",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "holder",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "exempt",
+        "type": "bool"
+      }
+    ],
+    "name": "setIsAllExempt",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
