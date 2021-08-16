@@ -7,7 +7,7 @@ import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 contract SampleERC20 is ERC20('SampleERC20', 'SE') {
     uint8 _decimals;
 
-    constructor(uint8 decimals_, uint256 _totalSupply) public {
+    constructor(uint8 decimals_, uint256 _totalSupply) {
         _decimals = decimals_;
         _mint(msg.sender, _totalSupply);
     }

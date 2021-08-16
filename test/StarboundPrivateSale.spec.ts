@@ -143,7 +143,9 @@ describe('StarboundPrivateSale', () => {
         expect(await privateSaleByAlice.bnbRemaining()).to.eq(ethers.utils.parseEther('5.9'))
         expect(await privateSaleByAlice.getReservedTokens()).to.eq(ethers.utils.parseUnits('18000', 9))
 
-        await privateSaleByAlice.purchaseTokens({ value: maxCommitment.sub(minCommitment) })
+        await privateSaleByAlice.purchaseTokens({
+          value: maxCommitment.sub(minCommitment),
+        })
         expect(await privateSale.tokensPurchased(alice.address)).to.eq(maxCommitment)
         expect(await privateSale.tokensSold()).to.eq(maxCommitment)
         expect(await privateSaleByAlice.tokensRemaining()).to.eq(ethers.utils.parseUnits('720000', 9))
@@ -191,8 +193,12 @@ describe('StarboundPrivateSale', () => {
       it('transfers BNB balance to the owner wallet', async () => {
         await provider.send('evm_setNextBlockTimestamp', [startDate + 1])
         await privateSale.addToWhitelist([alice.address, bob.address])
-        await privateSaleByAlice.purchaseTokens({ value: ethers.utils.parseEther('1') })
-        await privateSaleByBob.purchaseTokens({ value: ethers.utils.parseEther('0.5') })
+        await privateSaleByAlice.purchaseTokens({
+          value: ethers.utils.parseEther('1'),
+        })
+        await privateSaleByBob.purchaseTokens({
+          value: ethers.utils.parseEther('0.5'),
+        })
         expect(await provider.getBalance(privateSale.address)).to.eq(ethers.utils.parseEther('1.5'))
         const oldOwnerBalance = await provider.getBalance(owner.address)
         await privateSale.withdrawBnb()

@@ -1,4 +1,5 @@
 node_modules
+flatten
 
 #Hardhat files
 cache

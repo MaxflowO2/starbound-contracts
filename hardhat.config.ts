@@ -8,6 +8,7 @@ import 'hardhat-gas-reporter'
 import 'hardhat-deploy';
 
 const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY || ''
+const INFURA_API_KEY = process.env.INFURA_API_KEY || "";
 const BLOCK_EXPLORER_API_KEY = process.env.BLOCK_EXPLORER_API_KEY || ''
 
 const config: HardhatUserConfig = {
@@ -35,10 +36,18 @@ const config: HardhatUserConfig = {
     ],
   },
   networks: {
-    hardhat: {},
+    hardhat: {
+      forking: {
+        url: "https://bsc-dataseed.binance.org",
+      }
+    },
     bscTestnet: {
       url: 'https://data-seed-prebsc-1-s1.binance.org:8545',
       chainId: 97,
+      accounts: [OWNER_PRIVATE_KEY],
+    },
+    ropsten: {
+      url: `https://ropsten.infura.io/v3/${INFURA_API_KEY}`,
       accounts: [OWNER_PRIVATE_KEY],
     },
     mainnet: {
